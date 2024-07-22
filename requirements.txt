@@ -1,6 +1,10 @@
-requests
-PyExecJS
+requests==2.31.0
+PyExecJS==1.5.1
 loguru==0.7.2
 pycryptodome==3.20.0
 openai-whisper==20231117
 setuptools-rust
+betterproto==2.0.0b6
+websocket-client==1.8.0
+numpy==1.26.4
+opencc
