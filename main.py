@@ -1,14 +1,3 @@
-# -*- encoding: utf-8 -*-
-
-"""
-Author: Hmily
-GitHub: https://github.com/ihmily
-Date: 2023-07-17 23:52:05
-Update: 2024-07-15 22:55:29
-Copyright (c) 2023-2024 by Hmily, All Rights Reserved.
-Function: Record live stream video.
-"""
-
 import os
 import sys
 import subprocess
@@ -28,6 +17,10 @@ from urllib.error import URLError, HTTPError
 from typing import Any, Union, Dict
 import configparser
 
+from deep_translator import GoogleTranslator
+from translate import Translator
+
+from dan_mu_fetcher.liveMan import DouyinLiveWebFetcher
 from spider import (
     get_douyin_stream_data,
     get_douyin_app_stream_data,
@@ -102,6 +95,8 @@ ffmpeg_path = f"{script_path}/ffmpeg.exe"
 default_path = f'{script_path}/downloads'
 os.makedirs(default_path, exist_ok=True)
 file_update_lock = threading.Lock()
+translator_vpn = GoogleTranslator(source='auto', target='en')
+translator = Translator(to_lang="en", from_lang="zh")
 
 
 def signal_handler(_signal, _frame):
@@ -665,6 +660,90 @@ def push_message(content: str) -> Union[str, list]:
     return push_pts
 
 
+def fetch_danmu(platform: str, room_id: str, save_danmu_file_path: str):
+    if platform == 'DouyinLive':
+        DouyinLiveWebFetcher(room_id, save_danmu_file_path, split_time).start()
+
+
+def start_record_douyin(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        if 'live.douyin.com' in record_url:
+            json_data = get_douyin_stream_data(
+                url=record_url,
+                proxy_addr=proxy_address,
+                cookies=dy_cookie)
+        else:
+            json_data = get_douyin_app_stream_data(
+                url=record_url,
+                proxy_addr=proxy_address,
+                cookies=dy_cookie)
+        port_info = get_douyin_stream_url(json_data, record_quality)
+        port_info['rid'] = record_url.split('/')[-1]
+        return port_info
+
+
+def start_record_tiktok(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        if global_proxy or proxy_address:
+            json_data = get_tiktok_stream_data(
+                url=record_url,
+                proxy_addr=proxy_address,
+                cookies=tiktok_cookie)
+            return get_tiktok_stream_url(json_data, record_quality)
+        else:
+            logger.error(f"错误信息: 网络异常，请检查网络是否能正常访问TikTok平台")
+            return []
+
+
+def start_record_kuai(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        json_data = get_kuaishou_stream_data(
+            url=record_url,
+            proxy_addr=proxy_address,
+            cookies=ks_cookie)
+        return get_kuaishou_stream_url(json_data, record_quality)
+
+
+def start_record_huya(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        if record_quality not in ['原画', '蓝光', '超清']:
+            json_data = get_huya_stream_data(
+                url=record_url,
+                proxy_addr=proxy_address,
+                cookies=hy_cookie)
+            return get_huya_stream_url(json_data, record_quality)
+        else:
+            return get_huya_app_stream_url(
+                url=record_url,
+                proxy_addr=proxy_address,
+                cookies=hy_cookie
+            )
+
+
+def start_record_douyu(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        json_data = get_douyu_info_data(
+            url=record_url, proxy_addr=proxy_address, cookies=douyu_cookie)
+        return get_douyu_stream_url(
+            json_data, proxy_address=proxy_address, cookies=douyu_cookie,
+            video_quality=record_quality
+        )
+
+
+def start_record_yy(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        json_data = get_yy_stream_data(
+            url=record_url, proxy_addr=proxy_address, cookies=yy_cookie)
+        return get_yy_stream_url(json_data)
+
+
+def start_record_bilibili(record_url: str, proxy_address: str, record_quality: str):
+    with semaphore:
+        json_data = get_bilibili_stream_data(
+            url=record_url, proxy_addr=proxy_address, cookies=bili_cookie)
+        return get_bilibili_stream_url(json_data, record_quality)
+
+
 def start_record(url_data: tuple, count_variable: int = -1):
     global warning_count
     global video_save_path
@@ -681,20 +760,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
             count_time = time.time()
             retry = 0
             record_quality, record_url, anchor_name = url_data
-            proxy_address = proxy_addr
-
-            if proxy_addr:
-                proxy_address = None
-                for platform in enable_proxy_platform_list:
-                    if platform and platform.strip() in url:
-                        proxy_address = proxy_addr
-                        break
-
-            if not proxy_address:
-                if extra_enable_proxy_platform_list:
-                    for pt in extra_enable_proxy_platform_list:
-                        if pt and pt.strip() in url:
-                            proxy_address = proxy_addr_bak if proxy_addr_bak else None
+            proxy_address = config_proxy()
 
             # print(f'\r代理地址:{proxy_address}')
             print(f"\r运行新线程,传入地址 {record_url}")
@@ -702,85 +768,37 @@ def start_record(url_data: tuple, count_variable: int = -1):
                 try:
                     port_info = []
                     if record_url.find("douyin.com/") > -1:
-                        platform = '抖音直播'
-                        with semaphore:
-                            if 'live.douyin.com' in record_url:
-                                json_data = get_douyin_stream_data(
-                                    url=record_url,
-                                    proxy_addr=proxy_address,
-                                    cookies=dy_cookie)
-                            else:
-                                json_data = get_douyin_app_stream_data(
-                                    url=record_url,
-                                    proxy_addr=proxy_address,
-                                    cookies=dy_cookie)
-                            port_info = get_douyin_stream_url(json_data, record_quality)
+                        platform = 'DouyinLive'
+                        port_info = start_record_douyin(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://www.tiktok.com/") > -1:
-                        platform = 'TikTok直播'
-                        with semaphore:
-                            if global_proxy or proxy_address:
-                                json_data = get_tiktok_stream_data(
-                                    url=record_url,
-                                    proxy_addr=proxy_address,
-                                    cookies=tiktok_cookie)
-                                port_info = get_tiktok_stream_url(json_data, record_quality)
-                            else:
-                                logger.error(f"错误信息: 网络异常，请检查网络是否能正常访问TikTok平台")
+                        platform = 'TikTokLive'
+                        port_info = start_record_tiktok(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://live.kuaishou.com/") > -1:
-                        platform = '快手直播'
-                        with semaphore:
-                            json_data = get_kuaishou_stream_data(
-                                url=record_url,
-                                proxy_addr=proxy_address,
-                                cookies=ks_cookie)
-                            port_info = get_kuaishou_stream_url(json_data, record_quality)
+                        platform = 'KuaishouLive'
+                        port_info = start_record_kuai(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://www.huya.com/") > -1:
-                        platform = '虎牙直播'
-                        with semaphore:
-                            if record_quality not in ['原画', '蓝光', '超清']:
-                                json_data = get_huya_stream_data(
-                                    url=record_url,
-                                    proxy_addr=proxy_address,
-                                    cookies=hy_cookie)
-                                port_info = get_huya_stream_url(json_data, record_quality)
-                            else:
-                                port_info = get_huya_app_stream_url(
-                                    url=record_url,
-                                    proxy_addr=proxy_address,
-                                    cookies=hy_cookie
-                                )
+                        platform = 'HuyaLive'
+                        port_info = start_record_huya(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://www.douyu.com/") > -1:
-                        platform = '斗鱼直播'
-                        with semaphore:
-                            json_data = get_douyu_info_data(
-                                url=record_url, proxy_addr=proxy_address, cookies=douyu_cookie)
-                            port_info = get_douyu_stream_url(
-                                json_data, proxy_address=proxy_address, cookies=douyu_cookie,
-                                video_quality=record_quality
-                            )
+                        platform = 'DouyuLive'
+                        port_info = start_record_douyu(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://www.yy.com/") > -1:
-                        platform = 'YY直播'
-                        with semaphore:
-                            json_data = get_yy_stream_data(
-                                url=record_url, proxy_addr=proxy_address, cookies=yy_cookie)
-                            port_info = get_yy_stream_url(json_data)
+                        platform = 'YYLive'
+                        port_info = start_record_yy(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://live.bilibili.com/") > -1:
-                        platform = 'B站直播'
-                        with semaphore:
-                            json_data = get_bilibili_stream_data(
-                                url=record_url, proxy_addr=proxy_address, cookies=bili_cookie)
-                            port_info = get_bilibili_stream_url(json_data, record_quality)
+                        platform = 'BilibiliLive'
+                        port_info = start_record_bilibili(record_url, proxy_address, record_quality)
 
                     elif record_url.find("https://www.redelight.cn/") > -1 or \
                             record_url.find("https://www.xiaohongshu.com/") > -1 or \
                             record_url.find("http://xhslink.com/") > -1:
-                        platform = '小红书直播'
+                        platform = 'RedbookLive'
                         if retry > 0:
                             delete_line(url_config_file, record_url)
                             if record_url in runing_list:
@@ -793,12 +811,12 @@ def start_record(url_data: tuple, count_variable: int = -1):
                             retry += 1
 
                     elif record_url.find("https://www.bigo.tv/") > -1 or record_url.find("slink.bigovideo.tv/") > -1:
-                        platform = 'Bigo直播'
+                        platform = 'BigoLive'
                         with semaphore:
                             port_info = get_bigo_stream_url(record_url, proxy_addr=proxy_address, cookies=bigo_cookie)
 
                     elif record_url.find("https://app.blued.cn/") > -1:
-                        platform = 'Blued直播'
+                        platform = 'BluedLive'
                         with semaphore:
                             port_info = get_blued_stream_url(record_url, proxy_addr=proxy_address, cookies=blued_cookie)
 
@@ -817,13 +835,13 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                 logger.error(f"错误信息: 网络异常，请检查本网络是否能正常访问AfreecaTV平台")
 
                     elif record_url.find("cc.163.com/") > -1:
-                        platform = '网易CC直播'
+                        platform = 'WangyiCCLive'
                         with semaphore:
                             json_data = get_netease_stream_data(url=record_url, cookies=netease_cookie)
                             port_info = get_netease_stream_url(json_data, record_quality)
 
                     elif record_url.find("qiandurebo.com/") > -1:
-                        platform = '千度热播'
+                        platform = 'QianduLive'
                         with semaphore:
                             port_info = get_qiandurebo_stream_data(
                                 url=record_url, proxy_addr=proxy_address, cookies=qiandurebo_cookie)
@@ -842,7 +860,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                 logger.error(f"错误信息: 网络异常，请检查本网络是否能正常访问PandaTV直播平台")
 
                     elif record_url.find("fm.missevan.com/") > -1:
-                        platform = '猫耳FM直播'
+                        platform = 'MaoerFMLive'
                         with semaphore:
                             port_info = get_maoerfm_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=maoerfm_cookie)
@@ -875,7 +893,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                 logger.error(f"错误信息: 网络异常，请检查本网络是否能正常访问FlexTV直播平台")
 
                     elif record_url.find("look.163.com/") > -1:
-                        platform = 'Look直播'
+                        platform = 'LookLive'
                         with semaphore:
                             port_info = get_looklive_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=look_cookie
@@ -909,7 +927,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                             )
 
                     elif record_url.find("live.baidu.com/") > -1:
-                        platform = '百度直播'
+                        platform = 'BaiduLive'
                         with semaphore:
                             json_data = get_baidu_stream_data(
                                 url=record_url,
@@ -918,14 +936,14 @@ def start_record(url_data: tuple, count_variable: int = -1):
                             port_info = get_stream_url(json_data, record_quality)
 
                     elif record_url.find("weibo.com/") > -1:
-                        platform = '微博直播'
+                        platform = 'WeiboLive'
                         with semaphore:
                             json_data = get_weibo_stream_data(
                                 url=record_url, proxy_addr=proxy_address, cookies=weibo_cookie)
                             port_info = get_stream_url(json_data, record_quality, extra_key='m3u8_url')
 
                     elif record_url.find("kugou.com/") > -1:
-                        platform = '酷狗直播'
+                        platform = 'KugouLive'
                         with semaphore:
                             port_info = get_kugou_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=kugou_cookie)
@@ -950,13 +968,13 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                 url=record_url, proxy_addr=proxy_address, cookies=liveme_cookie)
 
                     elif record_url.find("www.huajiao.com/") > -1:
-                        platform = '花椒直播'
+                        platform = 'HuajiaoLive'
                         with semaphore:
                             port_info = get_huajiao_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=huajiao_cookie)
 
                     elif record_url.find("7u66.com/") > -1:
-                        platform = '流星直播'
+                        platform = 'LiuxingLive'
                         with semaphore:
                             port_info = get_liuxing_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=liuxing_cookie)
@@ -976,13 +994,13 @@ def start_record(url_data: tuple, count_variable: int = -1):
                             port_info = get_stream_url(json_data, record_quality, url_type='flv', extra_key='url')
 
                     elif record_url.find("rengzu.com/") > -1:
-                        platform = '时光直播'
+                        platform = 'ShiguangLive'
                         with semaphore:
                             port_info = get_shiguang_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=shiguang_cookie)
 
                     elif record_url.find("www.inke.cn/") > -1:
-                        platform = '映客直播'
+                        platform = 'YingkeLive'
                         with semaphore:
                             port_info = get_yingke_stream_url(
                                 url=record_url, proxy_addr=proxy_address, cookies=yingke_cookie)
@@ -1066,10 +1084,22 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                     if len(video_save_path) > 0:
                                         if video_save_path[-1] not in ["/", "\\"]:
                                             video_save_path = video_save_path + "/"
-                                        full_path = f'{video_save_path}{platform}'
+
+                                        if use_vpn:
+                                            translated_platform = translator_vpn.translate(platform)
+                                        else:
+                                            translated_platform = translator.translate(platform)
+
+                                        translated_platform = translated_platform.replace(" ", "")
+                                        full_path = f'{video_save_path}{translated_platform}'
 
                                     full_path = full_path.replace("\\", '/')
                                     if folder_by_author:
+                                        if use_vpn:
+                                            anchor_name = translator_vpn.translate(anchor_name)
+                                        else:
+                                            anchor_name = translator.translate(anchor_name)
+                                        anchor_name = anchor_name.replace(" ", "")
                                         full_path = f'{full_path}/{anchor_name}'
                                     if not os.path.exists(full_path):
                                         os.makedirs(full_path)
@@ -1314,6 +1344,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                                 save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp3"
                                             else:
                                                 save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.ts"
+                                            save_danmu_path_name = f"{full_path}/{anchor_name}_{now}_%03d.txt"
 
                                             command = [
                                                 "-map", "0:a",
@@ -1324,6 +1355,11 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                                 "-reset_timestamps", "1",
                                                 save_path_name,
                                             ]
+                                            room_id = port_info.get('rid', None)
+                                            threading.Thread(
+                                                target=fetch_danmu,
+                                                args=(platform, room_id, save_danmu_path_name)
+                                            ).start()
                                             ffmpeg_command.extend(command)
                                             _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
                                             record_finished = True
@@ -1556,10 +1592,26 @@ def check_ffmpeg_existence():
     return True
 
 
+def config_proxy():
+    proxy = proxy_addr
+    if proxy_addr:
+        proxy = None
+        for platform in enable_proxy_platform_list:
+            if platform and platform.strip() in url:
+                proxy = proxy_addr
+                break
+
+    if not proxy:
+        if extra_enable_proxy_platform_list:
+            for pt in extra_enable_proxy_platform_list:
+                if pt and pt.strip() in url:
+                    proxy = proxy_addr_bak if proxy_addr_bak else None
+    return proxy
+
+
 if not check_ffmpeg_existence():
     logger.error("ffmpeg检查失败，程序将退出。")
     sys.exit(1)
-
 
 # --------------------------初始化程序-------------------------------------
 print("-----------------------------------------------------")
@@ -1646,6 +1698,7 @@ while True:
     video_save_type = read_config_value(config, '录制设置', '视频保存格式ts|mkv|flv|mp4|ts音频|mkv音频', "ts")
     video_record_quality = read_config_value(config, '录制设置', '原画|超清|高清|标清|流畅', "原画")
     use_proxy = options.get(read_config_value(config, '录制设置', '是否使用代理ip（是/否）', "是"), False)
+    use_vpn = options.get(read_config_value(config, '录制设置', '是否使用VPN', "否"), False)
     proxy_addr_bak = read_config_value(config, '录制设置', '代理地址', "")
     proxy_addr = None if not use_proxy else proxy_addr_bak
     max_request = int(read_config_value(config, '录制设置', '同一时间访问网络的线程数', 3))

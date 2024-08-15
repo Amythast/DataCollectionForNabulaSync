@@ -2,6 +2,7 @@
 
 import functools
 import hashlib
+import re
 import traceback
 from logger import logger
 import configparser
@@ -98,3 +99,32 @@ def update_config(file_path, section, key, new_value):
         print(f"配置文件中[{section}]下的{key}的值已更新")
     except Exception as e:
         print(f"写入配置文件时出错: {e}")
+
+
+def load_collect_file(file_path):
+    # 读取文档
+    contents = []
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            if line.strip():
+                timestamp, content = parse_content_line(line)
+                if timestamp:
+                    contents.append((timestamp, content))
+                else:
+                    if contents:
+                        last_timestamp = contents[-1][0]
+                        contents.append((last_timestamp, content))
+                    else:
+                        # 如果是文件开头部分没有时间戳的内容
+                        contents.append((None, content))
+    return contents
+
+
+def parse_content_line(line):
+    # 提取时间戳和内容
+    match = re.match(r"\[(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\] (.*)", line)
+    if match:
+        timestamp = match.group(1)
+        content = match.group(2)
+        return timestamp, content
+    return None, None

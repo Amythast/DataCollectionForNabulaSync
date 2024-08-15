@@ -1,11 +1,3 @@
-#!/usr/bin/python
-# coding:utf-8
-
-# @FileName:    liveMan.py
-# @Time:        2024/1/2 21:51
-# @Author:      bubu
-# @Project:     douyinLiveWebFetcher
-
 import codecs
 import gzip
 import hashlib
@@ -13,15 +5,18 @@ import random
 import re
 import string
 import urllib.parse
+import time
+from datetime import datetime
 
 import execjs
 import requests
 import websocket
 
-from douyin import *
+from dan_mu_fetcher.douyin import *
 
 
-def generateSignature(wss, script_file='sign.js'):
+def generateSignature(wss,
+                      script_file='/Users/feifeixia/LocalDesktop/GitHub/DouyinLiveRecorder/dan_mu_fetcher/sign.js'):
     """
     出现gbk编码问题则修改 python模块subprocess.py的源码中Popen类的__init__函数参数encoding值为 "utf-8"
     """
@@ -36,7 +31,7 @@ def generateSignature(wss, script_file='sign.js'):
     md5 = hashlib.md5()
     md5.update(param.encode())
     md5_param = md5.hexdigest()
-    
+
     with codecs.open(script_file, 'r', encoding='utf8') as f:
         script = f.read()
 
@@ -60,8 +55,8 @@ def generateMsToken(length=107):
 
 
 class DouyinLiveWebFetcher:
-    
-    def __init__(self, live_id):
+
+    def __init__(self, live_id, base_file_path, split_time):
         """
         直播间弹幕抓取对象
         :param live_id: 直播间的直播id，打开直播间web首页的链接如：https://live.douyin.com/261378947940，
@@ -70,16 +65,23 @@ class DouyinLiveWebFetcher:
         self.__ttwid = None
         self.__room_id = None
         self.live_id = live_id
+        self.start_time = datetime.now()
+        self.base_file_path = base_file_path
+        self.split_time = split_time
         self.live_url = "https://live.douyin.com/"
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
                           "Chrome/120.0.0.0 Safari/537.36"
-    
+
+    def _get_current_file_path(self):
+        file_index = (datetime.now() - self.start_time) / self.split_time
+        return self.base_file_path.format(file_index)
+
     def start(self):
         self._connectWebSocket()
-    
+
     def stop(self):
         self.ws.close()
-    
+
     @property
     def ttwid(self):
         """
@@ -99,7 +101,7 @@ class DouyinLiveWebFetcher:
         else:
             self.__ttwid = response.cookies.get('ttwid')
             return self.__ttwid
-    
+
     @property
     def room_id(self):
         """
@@ -122,11 +124,11 @@ class DouyinLiveWebFetcher:
             match = re.search(r'roomId\\":\\"(\d+)\\"', response.text)
             if match is None or len(match.groups()) < 1:
                 print("【X】No match found for roomId")
-            
+
             self.__room_id = match.group(1)
-            
+
             return self.__room_id
-    
+
     def _connectWebSocket(self):
         """
         连接抖音直播间websocket服务器，请求直播间数据
@@ -146,10 +148,10 @@ class DouyinLiveWebFetcher:
                f"&host=https://live.douyin.com&aid=6383&live_id=1&did_rule=3&endpoint=live_pc&support_wrds=1"
                f"&user_unique_id=7319483754668557238&im_path=/webcast/im/fetch/&identity=audience"
                f"&need_persist_msg_count=15&insert_task_id=&live_reason=&room_id={self.room_id}&heartbeatDuration=0")
-        
+
         signature = generateSignature(wss)
         wss += f"&signature={signature}"
-        
+
         headers = {
             "cookie": f"ttwid={self.ttwid}",
             'user-agent': self.user_agent,
@@ -165,24 +167,24 @@ class DouyinLiveWebFetcher:
         except Exception:
             self.stop()
             raise
-    
+
     def _wsOnOpen(self, ws):
         """
         连接建立成功
         """
-        print("WebSocket connected.")
-    
+        print(f"WebSocket connected. Prepared save path:{self.save_danmu_file_path} ")
+
     def _wsOnMessage(self, ws, message):
         """
         接收到数据
         :param ws: websocket实例
         :param message: 数据
         """
-        
+
         # 根据proto结构体解析对象
         package = PushFrame().parse(message)
         response = Response().parse(gzip.decompress(package.payload))
-        
+
         # 返回直播间服务器链接存活确认消息，便于持续获取数据
         if response.need_ack:
             ack = PushFrame(log_id=package.log_id,
@@ -190,42 +192,47 @@ class DouyinLiveWebFetcher:
                             payload=response.internal_ext.encode('utf-8')
                             ).SerializeToString()
             ws.send(ack, websocket.ABNF.OPCODE_BINARY)
-        
+
         # 根据消息类别解析消息体
         for msg in response.messages_list:
             method = msg.method
             try:
                 {
                     'WebcastChatMessage': self._parseChatMsg,  # 聊天消息
-                    'WebcastGiftMessage': self._parseGiftMsg,  # 礼物消息
-                    'WebcastLikeMessage': self._parseLikeMsg,  # 点赞消息
-                    'WebcastMemberMessage': self._parseMemberMsg,  # 进入直播间消息
-                    'WebcastSocialMessage': self._parseSocialMsg,  # 关注消息
-                    'WebcastRoomUserSeqMessage': self._parseRoomUserSeqMsg,  # 直播间统计
-                    'WebcastFansclubMessage': self._parseFansclubMsg,  # 粉丝团消息
+                    #     'WebcastGiftMessage': self._parseGiftMsg,  # 礼物消息
+                    #     'WebcastLikeMessage': self._parseLikeMsg,  # 点赞消息
+                    #     'WebcastMemberMessage': self._parseMemberMsg,  # 进入直播间消息
+                    #     'WebcastSocialMessage': self._parseSocialMsg,  # 关注消息
+                    #     'WebcastRoomUserSeqMessage': self._parseRoomUserSeqMsg,  # 直播间统计
+                    #     'WebcastFansclubMessage': self._parseFansclubMsg,  # 粉丝团消息
                     'WebcastControlMessage': self._parseControlMsg,  # 直播间状态消息
-                    'WebcastEmojiChatMessage': self._parseEmojiChatMsg,  # 聊天表情包消息
-                    'WebcastRoomStatsMessage': self._parseRoomStatsMsg,  # 直播间统计信息
-                    'WebcastRoomMessage': self._parseRoomMsg,  # 直播间信息
-                    'WebcastRoomRankMessage': self._parseRankMsg,  # 直播间排行榜信息
+                    #     'WebcastEmojiChatMessage': self._parseEmojiChatMsg,  # 聊天表情包消息
+                    #     'WebcastRoomStatsMessage': self._parseRoomStatsMsg,  # 直播间统计信息
+                    #     'WebcastRoomMessage': self._parseRoomMsg,  # 直播间信息
+                    #     'WebcastRoomRankMessage': self._parseRankMsg,  # 直播间排行榜信息
                 }.get(method)(msg.payload)
-            except Exception:
+            except Exception as e:
+                print(f"【解析消息失败】{method} {e}")
                 pass
-    
+
     def _wsOnError(self, ws, error):
         print("WebSocket error: ", error)
-    
+
     def _wsOnClose(self, ws, *args):
         print("WebSocket connection closed.")
-    
+
     def _parseChatMsg(self, payload):
         """聊天消息"""
         message = ChatMessage().parse(payload)
         user_name = message.user.nick_name
+        user_gender = message.user.gender
+        user_age = message.user.age_range
         user_id = message.user.id
         content = message.content
         print(f"【聊天msg】[{user_id}]{user_name}: {content}")
-    
+        save_msg = f"[user_name: {user_name}][gender: {user_gender}][age: {user_age}] {content}"
+        self.writeMsgToFile(save_msg)
+
     def _parseGiftMsg(self, payload):
         """礼物消息"""
         message = GiftMessage().parse(payload)
@@ -233,14 +240,14 @@ class DouyinLiveWebFetcher:
         gift_name = message.gift.name
         gift_cnt = message.combo_count
         print(f"【礼物msg】{user_name} 送出了 {gift_name}x{gift_cnt}")
-    
+
     def _parseLikeMsg(self, payload):
         '''点赞消息'''
         message = LikeMessage().parse(payload)
         user_name = message.user.nick_name
         count = message.count
         print(f"【点赞msg】{user_name} 点了{count}个赞")
-    
+
     def _parseMemberMsg(self, payload):
         '''进入直播间消息'''
         message = MemberMessage().parse(payload)
@@ -248,27 +255,27 @@ class DouyinLiveWebFetcher:
         user_id = message.user.id
         gender = ["女", "男"][message.user.gender]
         print(f"【进场msg】[{user_id}][{gender}]{user_name} 进入了直播间")
-    
+
     def _parseSocialMsg(self, payload):
         '''关注消息'''
         message = SocialMessage().parse(payload)
         user_name = message.user.nick_name
         user_id = message.user.id
         print(f"【关注msg】[{user_id}]{user_name} 关注了主播")
-    
+
     def _parseRoomUserSeqMsg(self, payload):
         '''直播间统计'''
         message = RoomUserSeqMessage().parse(payload)
         current = message.total
         total = message.total_pv_for_anchor
         print(f"【统计msg】当前观看人数: {current}, 累计观看人数: {total}")
-    
+
     def _parseFansclubMsg(self, payload):
         '''粉丝团消息'''
         message = FansclubMessage().parse(payload)
         content = message.content
         print(f"【粉丝团msg】 {content}")
-    
+
     def _parseEmojiChatMsg(self, payload):
         '''聊天表情包消息'''
         message = EmojiChatMessage().parse(payload)
@@ -277,27 +284,36 @@ class DouyinLiveWebFetcher:
         common = message.common
         default_content = message.default_content
         print(f"【聊天表情包id】 {emoji_id},user：{user},common:{common},default_content:{default_content}")
-    
+
     def _parseRoomMsg(self, payload):
         message = RoomMessage().parse(payload)
         common = message.common
         room_id = common.room_id
         print(f"【直播间msg】直播间id:{room_id}")
-    
+
     def _parseRoomStatsMsg(self, payload):
         message = RoomStatsMessage().parse(payload)
         display_long = message.display_long
         print(f"【直播间统计msg】{display_long}")
-    
+
     def _parseRankMsg(self, payload):
         message = RoomRankMessage().parse(payload)
         ranks_list = message.ranks_list
         print(f"【直播间排行榜msg】{ranks_list}")
-    
+
     def _parseControlMsg(self, payload):
         '''直播间状态消息'''
         message = ControlMessage().parse(payload)
-        
+
         if message.status == 3:
             print("直播间已结束")
             self.stop()
+
+    def writeMsgToFile(self, msg):
+        try:
+            save_danmu_file_path = self._get_current_file_path()
+            with open(save_danmu_file_path, 'a') as file:
+                now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+                file.write(f'[{now}] {msg} \n')
+        except Exception as e:
+            print(f"写入文件时发生错误: {e}")

@@ -7,4 +7,9 @@ setuptools-rust
 betterproto==2.0.0b6
 websocket-client==1.8.0
 numpy==1.26.4
-opencc
+sentence-transformers
+deep_translator
+translate~=3.6.1
+whisper
+openai~=1.37.1
+opencc==1.1.9
