@@ -11,7 +11,7 @@ import utils
 audio_text_prefix = '[audio_text]'
 audio_text_combined_prefix = '[audio_combined]'
 danmu_text_prefix = '[danmu_text]'
-audio_prefix = '[audio]'
+merge_for_azure_prefix = '[azure_finetune]'
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 # 繁体转简体
 cc = OpenCC('t2s')
@@ -20,10 +20,14 @@ cc = OpenCC('t2s')
 def transcribe_audio_to_text(ts_file_path):
     whisper_model = whisper.load_model("small")
     dir_path, filename = os.path.split(ts_file_path)
+    azure_folder = os.path.join(dir_path, 'azure')
+    if not os.path.exists(azure_folder):
+        os.makedirs(azure_folder)
+
     name, ext = os.path.splitext(filename)
     result = whisper_model.transcribe(ts_file_path, append_punctuations=True)
     new_filename = audio_text_prefix + name + '.txt'
-    processed_file_path = os.path.join(dir_path, new_filename)
+    processed_file_path = os.path.join(azure_folder, new_filename)
     for segment in result['segments']:
         content = format_output_with_timestamp(
             extract_timestamp_from_filename(filename),
@@ -71,24 +75,30 @@ def format_output_with_timestamp(base_timestamp, offset_seconds, content):
 
 
 def extract_timestamp_and_content(line):
+    if not line:
+        return None
     # 使用正则表达式提取时间戳和最后的内容部分
     timestamp_match = re.match(r"\[(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\]", line)
     if not timestamp_match:
         return None
     timestamp = timestamp_match.group(1)
 
-    content_start = line.rfind('] ')
-    if content_start != -1:
-        content = line[content_start + 2:].strip()
-        return timestamp, content
-    return None
+    content = line.split(']:')[-1].strip()
+
+    if not content or len(content) == 0:
+        return None
+    return timestamp, content
 
 
 # extract timestamp and content from danmu file, deduplicate and write to a new file
 def process_danmu_file(input_file):
     dir_path, filename = os.path.split(input_file)
+    azure_folder = os.path.join(dir_path, 'azure')
+    if not os.path.exists(azure_folder):
+        os.makedirs(azure_folder)
+
     name, ext = os.path.splitext(filename)
-    output_file = os.path.join(dir_path, danmu_text_prefix + name + '.txt')
+    output_file = os.path.join(azure_folder, danmu_text_prefix + name + '.txt')
     seen_content = set()  # 用于存储已经见过的内容
     with open(input_file, 'r', encoding='utf-8') as infile, open(output_file, 'w', encoding='utf-8') as outfile:
         for line in infile:
@@ -154,17 +164,13 @@ def combine_audio_contents(audio_text_file, similarity_threshold=0.8):
 
         i = j
 
-    save_combined_answers(combined_answers, audio_text_file)
-    return combined_answers
-
-
-def save_combined_answers(combined_answers, input_file_path):
-    dir_path, filename = os.path.split(input_file_path)
+    dir_path, filename = os.path.split(audio_text_file)
     name, ext = os.path.splitext(filename)
     output_file = os.path.join(dir_path, audio_text_combined_prefix + name + ext)
     with open(output_file, 'w', encoding='utf-8') as file:
         for answer in combined_answers:
             file.write(answer + '\n')
+    return output_file
 
 
 def combine_audio_and_danmu(
@@ -187,7 +193,7 @@ def combine_audio_and_danmu(
     audio_embeddings = model.encode(audio_text_contents, convert_to_tensor=True)
     danmu_embeddings = model.encode(danmu_text_contents, convert_to_tensor=True)
 
-    results = [{"role": "assistant", "content": a_content, "origin_index": i} for i, (a_timestamp, a_content) in enumerate(audio_contents)]
+    results = [{"role": "assistant", "content": a_content} for (a_timestamp, a_content) in audio_contents]
     origin_indexes = [i for i in range(len(audio_contents))]
     for i, (d_timestamp, d_content) in enumerate(danmu_contents):
         d_time = datetime.strptime(d_timestamp, "%Y-%m-%d_%H-%M-%S")
@@ -221,12 +227,17 @@ def combine_audio_and_danmu(
                     most_index = e
 
             insert_position = origin_indexes[best_position + most_index]
-            results.insert(insert_position, {"role": "user", "content": d_content, "insert_position": best_position + most_index})
+            results.insert(
+                insert_position,
+                {"role": "user", "content": d_content}
+            )
             for k in range(insert_position, len(audio_contents)):
                 origin_indexes[k] += 1
 
-    output_file = 'downloads/merged_output.json'
-    with open(output_file, 'w', encoding='utf-8') as file:
+    output_filename = audio_text_file.replace(f"{audio_text_combined_prefix}{audio_text_prefix}", f"{merge_for_azure_prefix}")
+    output_filename = output_filename.replace(".txt", ".json")
+
+    with open(output_filename, 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
     return results
 
@@ -234,6 +245,6 @@ def combine_audio_and_danmu(
 # transcribe_audio_to_text("downloads/XiaomiOfficialFlagshipStore/XiaomiOfficialFlagshipStore_2024-07-28_15-40-13_000.ts")
 # process_danmu_file("downloads/XiaomiOfficialFlagshipStore/XiaomiOfficialFlagshipStore_2024-07-28_15-40-13.txt")
 # combine_audio_contents("downloads/XiaomiOfficialFlagshipStore/[audio_text]XiaomiOfficialFlagshipStore_2024-07-28_15-40-13_000.txt")
-combine_audio_and_danmu(
-    "downloads/XiaomiOfficialFlagshipStore/[audio_combined][audio_text]XiaomiOfficialFlagshipStore_2024-07-28_15-40-13_000.txt",
-    "downloads/XiaomiOfficialFlagshipStore/[danmu_text]XiaomiOfficialFlagshipStore_2024-07-28_15-40-13.txt")
+# combine_audio_and_danmu(
+#     "downloads/XiaomiOfficialFlagshipStore/[audio_combined][audio_text]XiaomiOfficialFlagshipStore_2024-07-28_15-40-13_000.txt",
+#     "downloads/XiaomiOfficialFlagshipStore/[danmu_text]XiaomiOfficialFlagshipStore_2024-07-28_15-40-13.txt")

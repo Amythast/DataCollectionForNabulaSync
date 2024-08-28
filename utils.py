@@ -2,10 +2,36 @@
 
 import functools
 import hashlib
+import os
 import re
+import subprocess
+import sys
+import threading
 import traceback
 from logger import logger
 import configparser
+
+file_update_lock = threading.Lock()
+
+
+def check_ffmpeg_existence(ffmpeg_path):
+    dev_null = open(os.devnull, 'wb')
+    try:
+        subprocess.run(['ffmpeg', '--help'], stdout=dev_null, stderr=dev_null, check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(e)
+        sys.exit(1)
+    except FileNotFoundError:
+        ffmpeg_file_check = subprocess.getoutput(ffmpeg_path)
+        if ffmpeg_file_check.find("run") > -1 and os.path.isfile(ffmpeg_path):
+            os.environ['PATH'] += os.pathsep + os.path.dirname(os.path.abspath(ffmpeg_path))
+            # print(f"已将ffmpeg路径添加到环境变量：{ffmpeg_path}")
+            return
+        else:
+            logger.error("检测到ffmpeg不存在,请将ffmpeg.exe放到同目录,或者设置为环境变量,没有ffmpeg将无法录制")
+            sys.exit(0)
+    finally:
+        dev_null.close()
 
 
 def trace_error_decorator(func):
@@ -36,71 +62,6 @@ def dict_to_cookie_str(cookies_dict):
     return cookie_str
 
 
-def read_config_value(file_path, section, key):
-    """
-    从配置文件中读取指定键的值。
-
-    参数:
-    - file_path: 配置文件的路径。
-    - section: 部分名称。
-    - key: 键名称。
-
-    返回:
-    - 键的值，如果部分或键不存在则返回None。
-    """
-    config = configparser.ConfigParser()
-
-    try:
-        config.read(file_path, encoding='utf-8-sig')
-    except Exception as e:
-        print(f"读取配置文件时出错: {e}")
-        return None
-
-    if section in config:
-        if key in config[section]:
-            return config[section][key]
-        else:
-            print(f"键[{key}]不存在于部分[{section}]中。")
-    else:
-        print(f"部分[{section}]不存在于文件中。")
-
-    return None
-
-
-def update_config(file_path, section, key, new_value):
-    """
-    更新配置文件中的键值。
-
-    参数:
-    - file_path: 配置文件的路径。
-    - section: 要更新的部分名称。
-    - key: 要更新的键名称。
-    - new_value: 新的键值。
-    """
-    config = configparser.ConfigParser()
-
-    try:
-        config.read(file_path, encoding='utf-8-sig')
-    except Exception as e:
-        print(f"读取配置文件时出错: {e}")
-        return
-
-    if section not in config:
-        print(f"部分[{section}]不存在于文件中。")
-        return
-
-    # 转义%字符
-    escaped_value = new_value.replace('%', '%%')
-    config[section][key] = escaped_value
-
-    try:
-        with open(file_path, 'w', encoding='utf-8-sig') as configfile:
-            config.write(configfile)
-        print(f"配置文件中[{section}]下的{key}的值已更新")
-    except Exception as e:
-        print(f"写入配置文件时出错: {e}")
-
-
 def load_collect_file(file_path):
     # 读取文档
     contents = []
@@ -128,3 +89,43 @@ def parse_content_line(line):
         content = match.group(2)
         return timestamp, content
     return None, None
+
+
+def transform_int_to_time(seconds: int) -> str:
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def contains_url(string: str) -> bool:
+    pattern = (r"(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-zA-Z0-9][a-zA-Z0-9\-]+(\.["
+               r"a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,10}(:[0-9]{1,5})?(\/.*)?$")
+    return re.search(pattern, string) is not None
+
+
+def update_file(file_path: str, old_str: str, new_str: str, start_str: str = None):
+    # 如果待更新的new_str 和 已有的 old_str 没区别，并且 不需要使用注释(start_str)，则直接返回
+    if old_str == new_str and start_str is None:
+        return
+    with file_update_lock:
+        file_data = ""
+        with open(file_path, "r", encoding="utf-8-sig") as f:
+            for text_line in f:
+                if old_str in text_line:
+                    text_line = text_line.replace(old_str, new_str)
+                    if start_str:
+                        text_line = f'{start_str}{text_line}'
+                file_data += text_line
+        with open(file_path, "w", encoding="utf-8-sig") as f:
+            f.write(file_data)
+
+
+def delete_line(file_path: str, del_line: str):
+    with file_update_lock:
+        with open(file_path, 'r+', encoding='utf-8') as f:
+            lines = f.readlines()
+            f.seek(0)
+            f.truncate()
+            for txt_line in lines:
+                if del_line not in txt_line:
+                    f.write(txt_line)

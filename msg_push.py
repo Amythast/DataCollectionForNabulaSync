@@ -7,8 +7,8 @@ Date: 2023-09-03 19:18:36
 Update: 2024-07-01 22:16:36
 Copyright (c) 2023 by Hmily, All Rights Reserved.
 """
-
-from typing import Dict, Any, Optional
+import datetime
+from typing import Dict, Any, Optional, Union
 import json
 import urllib.request
 from utils import trace_error_decorator
@@ -66,6 +66,58 @@ def tg_bot(chat_id: int, token: str, content: str) -> Dict[str, Any]:
     json_str = response.read().decode('utf-8')
     json_data = json.loads(json_str)
     return json_data
+
+
+def _push_message(config_manager, content: str) -> Union[str, list]:
+    push_pts = []
+    if '微信' in config_manager.live_status_push:
+        push_pts.append('微信')
+        xizhi(config_manager.xizhi_api_url, content)
+    if '钉钉' in config_manager.live_status_push:
+        push_pts.append('钉钉')
+        dingtalk(config_manager.dingtalk_api_url, content, config_manager.dingtalk_phone_num)
+    if 'TG' in config_manager.live_status_push or 'tg' in config_manager.live_status_push:
+        push_pts.append('TG')
+        tg_bot(config_manager.tg_chat_id, config_manager.tg_token, content)
+    push_pts = '、'.join(push_pts) if len(push_pts) > 0 else []
+    return push_pts
+
+
+class MsgPushHelper:
+    def __init__(self):
+        self.live_start_pushed = False
+        pass
+
+    def push_live_msg(self, config_manager, port_info, record_name):
+        push_at = datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+        if port_info['is_live'] is False:
+            print(f"\r{record_name} 等待直播... ")
+
+            if self.live_start_pushed:
+                if config_manager.over_show_push:
+                    push_content = f"直播间状态更新：[直播间名称] 直播已结束！时间：[时间]"
+                    if config_manager.over_push_message_text:
+                        push_content = config_manager.over_push_message_text
+
+                    push_content = push_content.replace('[直播间名称]', record_name).replace('[时间]', push_at)
+                    push_pts = _push_message(push_content.replace(r'\n', '\n'))
+                    if push_pts:
+                        print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
+                self.live_start_pushed = False
+        else:
+            print(f"\r{record_name} 正在直播中...")
+
+            if config_manager.live_status_push and not self.live_start_pushed:
+                if config_manager.begin_show_push:
+                    push_content = f"直播间状态更新：[直播间名称] 正在直播中，时间：[时间]"
+                    if config_manager.begin_push_message_text:
+                        push_content = config_manager.begin_push_message_text
+
+                    push_content = push_content.replace('[直播间名称]', record_name).replace('[时间]', push_at)
+                    push_pts = _push_message(config_manager, push_content.replace(r'\n', '\n'))
+                    if push_pts:
+                        print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
+                self.live_start_pushed = True
 
 
 if __name__ == '__main__':
