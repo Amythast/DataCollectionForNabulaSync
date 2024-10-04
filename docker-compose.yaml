@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   app:
-    image: ihmily/douyin-live-recorder:latest
+    image: feifeixia/douyin-live-recorder:latest
     environment:
       - TERM=xterm-256color
     tty: true
     stdin_open: true
-    #build: .
+    build: .
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
