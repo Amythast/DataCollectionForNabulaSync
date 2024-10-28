@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package kuaishou.protobuf;
+
+message CSError {
+  uint32 code = 1;
+}

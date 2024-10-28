@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message LiveFansGroupState {
+  uint32 intimacyLevel = 1;
+  uint32 enterRoomSpecialEffect = 2;
+
+}

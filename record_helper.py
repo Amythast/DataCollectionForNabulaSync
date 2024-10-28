@@ -9,13 +9,13 @@ import time
 from typing import Dict, Any
 import urllib.request
 
-from config_helper import ConfigManager
-from danmu_fetcher_helper import DanmuFetcherHelper
-from utils import (logger, delete_line, transform_int_to_time)
-from msg_push import MsgPushHelper
+from network.config_helper import ConfigManager
+from danmu_fetcher.danmu_fetcher_helper import DanmuFetcherHelper
+from utils.logger import logger
+from utils import (delete_line, transform_int_to_time)
 from deep_translator import GoogleTranslator
 from translate import Translator
-from spider import (
+from network.spider import (
     get_douyin_stream_url,
     get_douyin_stream_data,
     get_douyin_app_stream_data,
@@ -247,7 +247,7 @@ class RecordManager:
         self.first_start = True
         self.record_threads_pool = locals()
         self.semaphore = threading.Semaphore(self.max_request)
-        self.retry = 0  # todo check this if need
+        self.retry = 0  # only used for red book live
         self.danmu_fetcher = DanmuFetcherHelper(self.config_manager)
 
     def display_info(self):
@@ -259,44 +259,43 @@ class RecordManager:
                     os.system("cls")
                 elif os.name == 'posix':
                     os.system("clear")
-                print("-" * 60)
-                print(f"\r共监测{self.monitoring}个直播中", end=" | ")
-                print(f"同一时间访问网络的线程数: {self.max_request}", end=" | ")
+                logger.info("-" * 60)
+                format_now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                logger.info(f"当前时间: {format_now_time}")
+                logger.info(f"\r共监测{self.monitoring}个直播中")
+                logger.info(f"同一时间访问网络的线程数: {self.max_request}")
                 if len(self.config_manager.video_save_path) > 0:
                     if not os.path.exists(self.config_manager.video_save_path):
-                        print("配置文件里,直播保存路径并不存在,请重新输入一个正确的路径.或留空表示当前目录,按回车退出")
-                        input("程序结束")
+                        logger.info("配置文件里,直播保存路径并不存在,请重新输入一个正确的路径.或留空表示当前目录,按回车退出")
+                        logger.info("程序结束")
                         sys.exit(0)
 
-                print(f"是否开启代理录制: {'是' if self.config_manager.use_proxy else '否'}", end=" | ")
+                logger.info(f"是否开启代理录制: {'是' if self.config_manager.use_proxy else '否'}")
                 if self.config_manager.split_video_by_time:
-                    print(f"录制分段开启: {self.config_manager.split_time}秒", end=" | ")
-                print(f"是否生成时间文件: {'是' if self.config_manager.create_time_file else '否'}", end=" | ")
-                print(f"录制视频质量为: {self.config_manager.video_record_quality}", end=" | ")
-                print(f"录制视频格式为: {self.config_manager.video_save_type}", end=" | ")
-                print(f"目前瞬时错误数为: {self.warning_count}", end=" | ")
-                format_now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                print(f"当前时间: {format_now_time}")
+                    logger.info(f"录制分段开启: {self.config_manager.split_time}秒")
+                logger.info(f"是否生成时间文件: {'是' if self.config_manager.create_time_file else '否'}")
+                logger.info(f"录制视频质量为: {self.config_manager.video_record_quality}")
+                logger.info(f"录制视频格式为: {self.config_manager.video_save_type}")
+                logger.info(f"目前瞬时错误数为: {self.warning_count}")
 
                 if len(self.recording) == 0:
                     time.sleep(5)
-                    print(f"\r没有正在录制的直播 {format_now_time[-8:]}", end="")
-                    print("")
+                    logger.info(f"\r没有正在录制的直播 {format_now_time[-8:]}")
                     continue
                 else:
                     now_time = datetime.datetime.now()
                     if len(self.recording) > 0:
-                        print("*" * 60)
+                        logger.info(">" * 60)
                         no_repeat_recording = list(set(self.recording))
-                        print(f"正在录制{len(no_repeat_recording)}个直播: ")
+                        logger.info(f"正在录制{len(no_repeat_recording)}个直播: ")
                         for recording_live in no_repeat_recording:
                             rt, qa = self.recording_time_list[recording_live]
                             have_record_time = now_time - rt
-                            print(f"{recording_live}[{qa}] 正在录制中 " + str(have_record_time).split('.')[0])
-                        print("*" * 60)
+                            logger.info(f"{recording_live}[{qa}] 正在录制中 " + str(have_record_time).split('.')[0])
+                        logger.info(">" * 60)
                     else:
                         self.start_display_time = now_time
-                    print("-" * 60)
+                    logger.info("-" * 60)
             except Exception as e:
                 logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
 
@@ -316,13 +315,13 @@ class RecordManager:
                     else:
                         preset = 1
 
-                print("同一时间访问网络的线程数动态改为", self.max_request)
+                logger.info("同一时间访问网络的线程数动态改为", self.max_request)
                 self.warning_count = 0
                 time.sleep(5)
 
             elif 20 < self.warning_count:
                 self.max_request = 1
-                print("同一时间访问网络的线程数动态改为", self.max_request)
+                logger.info("同一时间访问网络的线程数动态改为", self.max_request)
                 self.warning_count = 0
                 time.sleep(10)
 
@@ -330,7 +329,7 @@ class RecordManager:
                 self.max_request = preset
                 self.warning_count = 0
                 start_time = time.time()
-                print("同一时间访问网络的线程数动态改为", self.max_request)
+                logger.info("同一时间访问网络的线程数动态改为", self.max_request)
             self.semaphore = threading.Semaphore(self.max_request)
 
     def create_ass_file(self, anchor_name, filename_short):
@@ -370,32 +369,33 @@ class RecordManager:
 
                 if url_tuple[1] not in self.running_list:
                     if not self.first_start:
-                        print(f"\r新增链接: {url_tuple[1]}")
+                        logger.info(f"\r新增链接: {url_tuple[1]}")
                     self.monitoring += 1
-                    self.record_threads_pool['thread' + str(self.monitoring)] = threading.Thread(
+                    self.record_threads_pool['thread-' + str(self.monitoring)] = threading.Thread(
                         target=self._start_record,
                         args=[url_tuple, self.monitoring]
                     )
-                    self.record_threads_pool['thread' + str(self.monitoring)].daemon = True
-                    self.record_threads_pool['thread' + str(self.monitoring)].start()
+                    self.record_threads_pool['thread-' + str(self.monitoring)].daemon = True
+                    self.record_threads_pool['thread-' + str(self.monitoring)].start()
                     self.running_list.append(url_tuple[1])
                     time.sleep(self.config_manager.local_delay_default)
         self.config_manager.url_tuples_list.clear()
         self.first_start = False
 
     def _start_record(self, url_data: tuple, count_variable: int = -1):
-        msg_push_helper = MsgPushHelper()
+        # msg_push_helper = MsgPushHelper()
+        thread_name = threading.current_thread().name
         while True:
             try:
                 record_finished = False
                 count_time = time.time()
-                retry = 0  ## todo pay attention to this
+                self.retry = 0  # only used for red book live
                 record_quality, record_url, anchor_name = url_data
                 proxy_address = self.config_manager.get_proxy_address(record_url)
 
                 if proxy_address:
-                    print(f'\r代理地址:{proxy_address}')
-                print(f"\r运行新线程,传入地址 {record_url}")
+                    logger.info(f'\r[{thread_name}]代理地址:{proxy_address}')
+                logger.info(f"\r[{thread_name}]运行新线程,传入地址 {record_url}")
 
                 while True:
                     try:
@@ -406,17 +406,20 @@ class RecordManager:
                         anchor_name = port_info.get("anchor_name", '')
 
                         if not anchor_name:
-                            print(f'序号{count_variable} 网址内容获取失败,进行重试中...获取失败的地址是:{url_data}')
+                            logger.error(f'[{thread_name}] 网址内容获取失败,进行重试中...获取失败的地址是:{url_data}')
                             self.warning_count += 1
                         else:
                             anchor_name = re.sub(self.rstr, "_", anchor_name)  # 过滤不能作为文件名的字符，替换为下划线
-                            record_name = f'序号{count_variable} {anchor_name}'
+                            threading.current_thread().name = f'{thread_name}-{anchor_name}'
+                            logger.info(f"\r线程名更新: {thread_name} -> {threading.current_thread().name}")
+                            thread_name = threading.current_thread().name
+                            record_name = thread_name
 
                             if anchor_name in self.recording:
-                                print(f"新增的地址: {anchor_name} 已经存在,本条线程将会退出")
+                                logger.info(f"[{thread_name}]新增的地址: {anchor_name} 已经存在,本条线程将会退出")
                                 return
 
-                            msg_push_helper.push_live_msg(self.config_manager, port_info, record_name)
+                            # msg_push_helper.push_live_msg(self.config_manager, port_info, record_name)
 
                             if port_info['is_live'] is False:
                                 # 未开播
@@ -438,7 +441,7 @@ class RecordManager:
                                 count_time = time.time()
 
                     except Exception as e:
-                        logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+                        logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                         self.warning_count += 1
 
                     # 生成-5到5的随机数，加上delay_default，确保不小于0
@@ -447,7 +450,7 @@ class RecordManager:
                     # 如果出错太多,延迟加60秒
                     if self.warning_count > 20:
                         num += 60
-                        print("瞬时错误太多,延迟加60秒")
+                        logger.info(f"[{thread_name}]瞬时错误太多,延迟加60秒")
 
                     # 检查录制是否结束，调整等待时间
                     x = 30 if record_finished and (time.time() - count_time) < 60 else num
@@ -456,15 +459,15 @@ class RecordManager:
                     # 等待中
                     while x > 0:
                         if self.config_manager.loop_time:
-                            print(f'\r{anchor_name}循环等待{x}秒 ', end="")
+                            logger.info(f'\r[{thread_name}]{anchor_name}循环等待{x}秒 ', end="")
                         time.sleep(1)
                         x -= 1
 
                     if self.config_manager.loop_time:
-                        print('\r检测直播间中...', end="")
+                        logger.info(f'\r[{thread_name}]检测直播间中...', end="")
 
             except Exception as e:
-                logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+                logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                 self.warning_count += 1
                 time.sleep(2)
 
@@ -548,7 +551,9 @@ class RecordManager:
                 url=record_url,
                 proxy_addr=proxy_address,
                 cookies=self.config_manager.ks_cookie)
-            return get_kuaishou_stream_url(json_data, record_quality)
+            port_info = get_kuaishou_stream_url(json_data, record_quality)
+            port_info['rid'] = record_url.split('/')[-1]
+            return port_info
 
     def _get_huya_live_info(self, record_url: str, proxy_address: str, record_quality: str) -> Dict[str, Any]:
         with self.semaphore:
@@ -835,13 +840,13 @@ class RecordManager:
 
     def _start_record_inner(self, record_quality, record_url, port_info, anchor_name, proxy_address, record_name):
         real_url = port_info['record_url']
-
         platform = port_info['platform']
+        thread_name = threading.current_thread().name
         translated_platform = (translator_vpn if self.config_manager.use_vpn else translator).translate(platform)
         translated_platform = translated_platform.replace(" ", "")
 
-        anchor_name = (translator_vpn if self.config_manager.use_vpn else translator).translate(anchor_name)
-        anchor_name = anchor_name.replace(" ", "")
+        # anchor_name = (translator_vpn if self.config_manager.use_vpn else translator).translate(anchor_name)
+        # anchor_name = anchor_name.replace(" ", "")
 
         video_save_path = self.config_manager.video_save_path.rstrip("/\\")  # 去除末尾的分隔符
         base_path = video_save_path if video_save_path else self.config_manager.default_path
@@ -857,11 +862,10 @@ class RecordManager:
                 if not os.path.exists(full_path):
                     os.makedirs(full_path)
             except Exception as e:
-                logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+                logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
 
             if not os.path.exists(full_path):
-                logger.error(
-                    "错误信息: 保存路径不存在,不能生成录制.请避免把本程序放在c盘,桌面,下载文件夹,qq默认传输目录.请重新检查设置")
+                logger.error(f"[{thread_name}]错误信息: 保存路径不存在,不能生成录制.请避免把本程序放在c盘,桌面,下载文件夹,qq默认传输目录.请重新检查设置")
 
             ffmpeg_executor = FFmpegExecutor(self.config_manager, record_url, real_url, proxy_address)
             urllib_executor = UrllibExecutor(port_info)
@@ -872,9 +876,9 @@ class RecordManager:
             if self.config_manager.show_url:
                 re_plat = ['WinkTV', 'PandaTV', 'ShowRoom']
                 if platform in re_plat:
-                    logger.info(f"{platform} | {anchor_name} | 直播源地址: {port_info['m3u8_url']}")
+                    logger.info(f"[{thread_name}]{platform} | {anchor_name} | 直播源地址: {port_info['m3u8_url']}")
                 else:
-                    logger.info(f"{platform} | {anchor_name} | 直播源地址: {port_info['record_url']}")
+                    logger.info(f"[{thread_name}]{platform} | {anchor_name} | 直播源地址: {port_info['record_url']}")
 
             video_save_type_functions = {
                 'FLV': self._save_flv_video_file,
@@ -887,8 +891,12 @@ class RecordManager:
 
             save_danmu_path_name = f"{full_path}/{anchor_name}_{now}_danmu.txt"
             room_id = port_info.get('rid', None)
-            threading.Thread(target=self.danmu_fetcher.fetch_danmu, args=(platform, room_id, save_danmu_path_name)) \
-                .start()
+            threading.Thread(
+                target=self.danmu_fetcher.fetch_danmu,
+                args=(platform, room_id, save_danmu_path_name),
+                daemon=True,
+                name=f"{thread_name}-danmu-fetcher"
+            ).start()
 
             record_result = video_save_type_functions.get(self.config_manager.video_save_type)(
                 anchor_name, now, full_path, urllib_executor, ffmpeg_executor
@@ -898,9 +906,9 @@ class RecordManager:
                 self.recording.remove(record_name)
 
             if record_result:
-                print(f"\n{anchor_name} {time.strftime('%Y-%m-%d %H:%M:%S')} 直播录制完成\n")
+                logger.info(f"\n[{thread_name}]{anchor_name} {time.strftime('%Y-%m-%d %H:%M:%S')} 直播录制完成\n")
             else:
-                print(f"\n{anchor_name} {time.strftime('%Y-%m-%d %H:%M:%S')} 直播录制出错,请检查网络\n")
+                logger.info(f"\n[{thread_name}]{anchor_name} {time.strftime('%Y-%m-%d %H:%M:%S')} 直播录制出错,请检查网络\n")
             return record_result
 
     def _create_time_file(self, anchor_name, filename_short):
@@ -912,11 +920,11 @@ class RecordManager:
             self.record_threads_pool[str(filename_short)].daemon = True
             self.record_threads_pool[str(filename_short)].start()
 
-
     def _save_flv_video_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
         filename = anchor_name + '_' + now + '.flv'
         rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-        print(f'{rec_info}/{filename}')
+        thread_name = threading.current_thread().name
+        logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
         filename_short = full_path + '/' + anchor_name + '_' + now
         self._create_time_file(anchor_name, filename_short)
@@ -925,14 +933,15 @@ class RecordManager:
             urllib_executor.execute(full_path + '/' + filename)
             return True
         except Exception as e:
-            logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
             self.warning_count += 1
             return False
 
     def _save_mkv_video_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
         filename = anchor_name + '_' + now + ".mkv"
         rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-        print(f'{rec_info}/{filename}')
+        thread_name = threading.current_thread().name
+        logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
         save_file_path = full_path + '/' + filename
         filename_short = full_path + '/' + anchor_name + '_' + now
@@ -948,14 +957,15 @@ class RecordManager:
             ffmpeg_executor.execute(command)
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
             self.warning_count += 1
             return False
 
     def _save_mp4_video_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
         filename = anchor_name + '_' + now + ".mp4"
         rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-        print(f'{rec_info}/{filename}')
+        thread_name = threading.current_thread().name
+        logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
         save_file_path = full_path + '/' + filename
         filename_short = full_path + '/' + anchor_name + '_' + now
@@ -971,17 +981,18 @@ class RecordManager:
             ffmpeg_executor.execute(command)
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
             self.warning_count += 1
             return False
 
     def _save_mkv_audio_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
+        thread_name = threading.current_thread().name
         try:
             if self.config_manager.split_video_by_time:
                 now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
                 filename = anchor_name + '_' + now + ".mkv"
                 rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-                print(f'{rec_info}/{filename}')
+                logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
                 if self.config_manager.ts_to_mp3:
                     save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp3"
@@ -994,7 +1005,7 @@ class RecordManager:
             else:
                 filename = anchor_name + '_' + now + ".mkv"
                 rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-                print(f'{rec_info}/{filename}')
+                logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
                 save_file_path = full_path + '/' + filename
 
@@ -1006,17 +1017,18 @@ class RecordManager:
                     threading.Thread(target=self.converts_m4a, args=(save_file_path,)).start()
             return record_finished
         except subprocess.CalledProcessError as e:
-            logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
             self.warning_count += 1
             return False
 
     def _save_ts_audio_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
+        thread_name = threading.current_thread().name
         try:
             if self.config_manager.split_video_by_time:
                 now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
                 filename = anchor_name + '_' + now + ".ts"
                 rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-                print(f'{rec_info}/{filename}')
+                logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
                 if self.config_manager.ts_to_mp3:
                     save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp3"
@@ -1030,7 +1042,7 @@ class RecordManager:
             else:
                 filename = anchor_name + '_' + now + ".ts"
                 rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-                print(f'{rec_info}/{filename}')
+                logger.info(f'[{thread_name}]{rec_info}/{filename}')
                 save_file_path = full_path + '/' + filename
 
                 command = ffmpeg_executor.get_ts_audio_command(save_file_path)
@@ -1041,16 +1053,17 @@ class RecordManager:
                     threading.Thread(target=self.converts_m4a, args=(save_file_path,)).start()
             return record_finished
         except subprocess.CalledProcessError as e:
-            logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+            logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
             self.warning_count += 1
             return False
 
     def _save_ts_video_file(self, anchor_name, now, full_path, urllib_executor: UrllibExecutor, ffmpeg_executor: FFmpegExecutor):
+        thread_name = threading.current_thread().name
         if self.config_manager.split_video_by_time:
             now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
             filename = anchor_name + '_' + now + ".ts"
             rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-            print(f'{rec_info}/{filename}')
+            logger.info(f'[{thread_name}]{rec_info}/{filename}')
 
             try:
                 if self.config_manager.ts_to_mp4:
@@ -1064,15 +1077,14 @@ class RecordManager:
                 ffmpeg_executor.execute(command)
                 return True
             except subprocess.CalledProcessError as e:
-                logger.error(
-                    f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+                logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                 self.warning_count += 1
                 return False
 
         else:
             filename = anchor_name + '_' + now + ".ts"
             rec_info = f"\r{anchor_name} 录制视频中: {full_path}"
-            print(f'{rec_info}/{filename}')
+            logger.info(f'[{thread_name}]{rec_info}/{filename}')
             save_file_path = full_path + '/' + filename
             filename_short = full_path + '/' + anchor_name + '_' + now
 
@@ -1088,7 +1100,7 @@ class RecordManager:
                     threading.Thread(target=self.converts_m4a, args=(save_file_path,)).start()
                 return True
             except subprocess.CalledProcessError as e:
-                logger.error(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
+                logger.error(f"[{thread_name}]错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                 self.warning_count += 1
                 return False
 
@@ -1104,7 +1116,6 @@ class RecordManager:
                 time.sleep(1)
                 if os.path.exists(address):
                     os.remove(address)
-
 
     def converts_m4a(self, address: str):
         if self.config_manager.ts_to_m4a:

@@ -218,7 +218,7 @@ git clone https://github.com/ihmily/DouyinLiveRecorder.git
 2.进入项目文件夹，安装依赖
 
 ```bash
-cd DouyinLiveRecorder
+cd DataCollectionForNabulaSync
 pip3 install -r requirements.txt
 ```
 

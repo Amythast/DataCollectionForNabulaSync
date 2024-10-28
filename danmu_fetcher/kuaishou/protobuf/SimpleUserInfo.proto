@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SimpleUserInfo {
+  string principalId = 1;
+  string userName = 2;
+  string headUrl = 3;
+
+}

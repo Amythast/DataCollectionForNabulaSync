@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCWebGuessClosed {
+  uint64 time = 1;
+  string guessId = 2;
+  uint64 displayMaxDelayMillis = 3;
+
+}

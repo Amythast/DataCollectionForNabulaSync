@@ -1,7 +1,6 @@
 import signal
-import threading
 
-from config_helper import *
+from network.config_helper import *
 from record_helper import RecordManager
 from utils import (check_ffmpeg_existence)
 
@@ -9,13 +8,6 @@ from utils import (check_ffmpeg_existence)
 def signal_handler(_signal, _frame):
     sys.exit(0)
 
-
-version = "v3.0.7"
-platforms = (
-    "\n国内站点：抖音|快手|虎牙|斗鱼|YY|B站|小红书|bigo|blued|网易CC|千度热播|猫耳FM|Look|TwitCasting|百度|微博|"
-    "酷狗|LiveMe|花椒|流星|Acfun|时光|映客"
-    "\n海外站点：TikTok|AfreecaTV|PandaTV|WinkTV|FlexTV|PopkonTV|TwitchTV|ShowRoom"
-)
 
 text_no_repeat_url = []
 first_run = True
@@ -38,13 +30,8 @@ check_ffmpeg_existence(ffmpeg_path)
 
 # --------------------------初始化程序-------------------------------------
 print("-----------------------------------------------------")
-print("|                DouyinLiveRecorder                 |")
+print("|           DataCollectionForNabulaSync             |")
 print("-----------------------------------------------------")
-
-print(f"版本号: {version}")
-print(f"GitHub: https://github.com/ihmily/DouyinLiveRecorder")
-print(f'支持平台: {platforms}')
-print('.....................................................')
 
 os.makedirs(os.path.dirname(config_file), exist_ok=True)
 

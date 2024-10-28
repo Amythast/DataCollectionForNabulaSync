@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCWebBetClosed {
+  uint64 maxDelayMillis = 1;
+
+}

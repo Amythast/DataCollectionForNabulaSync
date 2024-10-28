@@ -12,6 +12,8 @@ pip install betterproto
 ## 1.在当前目录下打开终端，输入：
 ```shell
 protoc -I . --python_betterproto_out=. douyin.proto
+protoc -I . --python_out=. *.proto
+
 ```
 当前目录下生成文件`douyin.py`和`__init__.py`即为成功（此程序已经生成可用）。
 

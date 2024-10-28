@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message WebComboCommentFeed {
+  string id = 1;
+  string content = 2;
+  uint32 comboCount = 3;
+
+}

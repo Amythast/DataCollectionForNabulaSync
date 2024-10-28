@@ -1,0 +1,11 @@
+syntax = "proto3";
+import "WebWatchingUserInfo.proto";
+
+package kuaishou.protobuf;
+
+message SCWebLiveWatchingUsers {
+  repeated WebWatchingUserInfo watchingUser = 1;
+  string displayWatchingCount = 2;
+  uint64 pendingDuration = 3;
+
+}

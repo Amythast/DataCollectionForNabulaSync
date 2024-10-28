@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: nebula-dao-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: xwt961121
+    ports:
+      - "3306:3306"
+    volumes:
+      - /Volumes/External/nebula-dao-mysql/log:/var/log/mysql
+      - /Volumes/External/nebula-dao-mysql/dao:/var/lib/mysql
+      - /Volumes/External/nebula-dao-mysql/conf.d:/etc/mysql/conf.d

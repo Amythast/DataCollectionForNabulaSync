@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+enum WebCommentFeedShowType {
+  FEED_SHOW_UNKNOWN = 0;
+  FEED_SHOW_NORMAL = 1;
+  FEED_HIDDEN = 2;
+}

@@ -6,14 +6,20 @@ import os
 import random
 import re
 import string
+import subprocess
+import threading
 import urllib.parse
 import time
+from contextlib import contextmanager
 from datetime import datetime
+from unittest.mock import patch
 
 import execjs
 import requests
 import websocket
+from fake_useragent import UserAgent
 
+from danmu_fetcher.douyin import logger
 from danmu_fetcher.douyin.douyin_message import *
 
 
@@ -31,9 +37,21 @@ def generate_ms_token(length=107):
     return random_str
 
 
+@contextmanager
+def patched_popen_encoding(encoding='utf-8'):
+    original_popen_init = subprocess.Popen.__init__
+
+    def new_popen_init(self, *args, **kwargs):
+        kwargs['encoding'] = encoding
+        original_popen_init(self, *args, **kwargs)
+
+    with patch.object(subprocess.Popen, '__init__', new_popen_init):
+        yield
+
+
 def generate_signature(
         wss,
-        script_file='/Users/feifeixia/LocalDesktop/GitHub/DouyinLiveRecorder/danmu_fetcher/douyin/sign.js'
+        script_file='/Users/feifeixia/LocalDesktop/GitHub/DataCollectionForNabulaSync/danmu_fetcher/douyin/sign.js'
 ):
     """
     出现gbk编码问题则修改 python模块subprocess.py的源码中Popen类的__init__函数参数encoding值为 "utf-8"
@@ -54,7 +72,8 @@ def generate_signature(
         script = f.read()
 
     context = execjs.compile(script)
-    ret = context.call('getSign', {'X-MS-STUB': md5_param})
+    with patched_popen_encoding(encoding='utf-8'):
+        ret = context.call('getSign', {'X-MS-STUB': md5_param})
     return ret.get('X-Bogus')
 
 
@@ -66,6 +85,7 @@ class DouyinDanmuFetcher:
         :param live_id: 直播间的直播id，打开直播间web首页的链接如：https://live.douyin.com/261378947940，
                         其中的261378947940即是live_id
         """
+        self.thread_name = threading.current_thread().name
         self.__ttwid = None
         self.__room_id = None
         self.live_id = live_id
@@ -73,8 +93,9 @@ class DouyinDanmuFetcher:
         self.base_file_path = base_file_path
         self.split_time = int(split_time)
         self.live_url = "https://live.douyin.com/"
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
-                          "Chrome/120.0.0.0 Safari/537.36"
+        # self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
+        #                   "Chrome/120.0.0.0 Safari/537.36"
+        self.user_agent = UserAgent().chrome
         self.message_handlers = {
             'WebcastChatMessage': self._parse_chat_msg,  # 聊天消息
             'WebcastControlMessage': self._parse_control_msg,  # 直播间状态消息
@@ -89,9 +110,6 @@ class DouyinDanmuFetcher:
             # 'WebcastRoomMessage': self._parseRoomMsg,  # 直播间信息
             # 'WebcastRoomRankMessage': self._parseRankMsg,  # 直播间排行榜信息
         }
-
-        logging.basicConfig(level=logging.ERROR)
-        self.logger = logging.getLogger(__name__)
 
     def _get_current_file_path(self):
         file_index = int((datetime.now() - self.start_time).total_seconds() / self.split_time)
@@ -119,7 +137,7 @@ class DouyinDanmuFetcher:
             response = requests.get(self.live_url, headers=headers)
             response.raise_for_status()
         except Exception as err:
-            print("【X】Request the live url error: ", err)
+            logger.error(f'[{self.thread_name}]Request the live room url error on get ttwid: {err}')
         else:
             self.__ttwid = response.cookies.get('ttwid')
             return self.__ttwid
@@ -132,24 +150,32 @@ class DouyinDanmuFetcher:
         """
         if self.__room_id:
             return self.__room_id
-        url = self.live_url + self.live_id
-        headers = {
-            "User-Agent": self.user_agent,
-            "cookie": f"ttwid={self.ttwid}&msToken={generate_ms_token()}; __ac_nonce=0123407cc00a9e438deb4",
-        }
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-        except Exception as err:
-            print("【X】Request the live room url error: ", err)
-        else:
-            match = re.search(r'roomId\\":\\"(\d+)\\"', response.text)
-            if match is None or len(match.groups()) < 1:
-                print("【X】No match found for roomId")
 
-            self.__room_id = match.group(1)
+        for attempt in range(10):
+            url = self.live_url + self.live_id
+            headers = {
+                "User-Agent": self.user_agent,
+                "cookie": f"ttwid={self.ttwid}&msToken={generate_ms_token()}; __ac_nonce=0123407cc00a9e438deb4",
+            }
+            try:
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+            except Exception as err:
+                logger.error(f"[{self.thread_name}]Request the live room url error on attempt {attempt + 1}: {err}")
+                self.user_agent = UserAgent().chrome
+                continue
+            else:
+                match = re.search(r'roomId\\":\\"(\d+)\\"', response.text)
+                if match:
+                    self.__room_id = match.group(1)
+                    logger.info(f"[{self.thread_name}]Match found for roomId: {self.__room_id}")
+                    return self.__room_id
+                else:
+                    logger.error(f"[{self.thread_name}]No match found for roomId on attempt {attempt + 1}")
+                    self.user_agent = UserAgent().chrome
 
-            return self.__room_id
+        logger.error(f"[{self.thread_name}]Failed to fetch roomId after retries.")
+        return None
 
     def _connect_websocket(self):
         """
@@ -196,7 +222,7 @@ class DouyinDanmuFetcher:
         """
         连接建立成功
         """
-        print(f"WebSocket connected. Prepared save path:{self._get_current_file_path()} ")
+        logger.info(f"[{self.thread_name}]WebSocket connected. Prepared save path:{self._get_current_file_path()} ")
 
     def _on_ws_message(self, ws, message):
         """
@@ -228,16 +254,16 @@ class DouyinDanmuFetcher:
                     handler(msg.payload)
                 except Exception as e:
                     # 记录详细错误日志
-                    self.logger.error(f"【解析消息失败】 方法: {method}, 错误: {e}", exc_info=True)
+                    logger.error(f"[{self.thread_name}][解析消息失败] 方法: {method}, 错误: {e}", exc_info=True)
             else:
                 # 当消息类型没有处理器时
-                self.logger.warning(f"未知/不处理的消息类型: {method}")
+                logger.warning(f"[{self.thread_name}]未知/不处理的消息类型: {method}")
 
     def _on_ws_error(self, ws, error):
-        self.logger.error("WebSocket error: ", error)
+        logger.error(f"[{self.thread_name}]WebSocket error: ", error)
 
     def _on_ws_close(self, ws, *args):
-        self.logger.info("WebSocket connection closed.")
+        logger.info(f"[{self.thread_name}]WebSocket connection closed.")
 
     def _parse_chat_msg(self, payload):
         """聊天消息"""
@@ -247,7 +273,7 @@ class DouyinDanmuFetcher:
         user_age = message.user.age_range
         user_id = message.user.id
         content = message.content
-        self.logger.info(f"【聊天msg】[{user_id}]{user_name}: {content}")
+        logger.info(f"[{self.thread_name}][聊天msg][{user_id}]{user_name}: {content}")
         save_msg = f"[user_name: {user_name}][gender: {user_gender}][age: {user_age}] {content}"
         self.write_msg_to_file(save_msg)
 
@@ -257,14 +283,14 @@ class DouyinDanmuFetcher:
         user_name = message.user.nick_name
         gift_name = message.gift.name
         gift_cnt = message.combo_count
-        self.logger.info(f"【礼物msg】{user_name} 送出了 {gift_name}x{gift_cnt}")
+        logger.info(f"[{self.thread_name}][礼物msg]{user_name} 送出了 {gift_name}x{gift_cnt}")
 
     def _parse_like_msg(self, payload):
         """点赞消息"""
         message = LikeMessage().parse(payload)
         user_name = message.user.nick_name
         count = message.count
-        self.logger.info(f"【点赞msg】{user_name} 点了{count}个赞")
+        logger.info(f"[{self.thread_name}][点赞msg]{user_name} 点了{count}个赞")
 
     def _parseMemberMsg(self, payload):
         """进入直播间消息"""
@@ -272,27 +298,27 @@ class DouyinDanmuFetcher:
         user_name = message.user.nick_name
         user_id = message.user.id
         gender = ["女", "男"][message.user.gender]
-        self.logger.info(f"【进场msg】[{user_id}][{gender}]{user_name} 进入了直播间")
+        logger.info(f"[{self.thread_name}][进场msg][{user_id}][{gender}]{user_name} 进入了直播间")
 
     def _parse_social_msg(self, payload):
         """关注消息"""
         message = SocialMessage().parse(payload)
         user_name = message.user.nick_name
         user_id = message.user.id
-        self.logger.info(f"【关注msg】[{user_id}]{user_name} 关注了主播")
+        logger.info(f"[{self.thread_name}][关注msg][{user_id}]{user_name} 关注了主播")
 
     def _parse_room_user_seq_msg(self, payload):
         """直播间统计"""
         message = RoomUserSeqMessage().parse(payload)
         current = message.total
         total = message.total_pv_for_anchor
-        self.logger.info(f"【统计msg】当前观看人数: {current}, 累计观看人数: {total}")
+        logger.info(f"[{self.thread_name}][统计msg]当前观看人数: {current}, 累计观看人数: {total}")
 
     def _parse_fans_club_msg(self, payload):
         """粉丝团消息"""
         message = FansclubMessage().parse(payload)
         content = message.content
-        self.logger.info(f"【粉丝团msg】 {content}")
+        logger.info(f"[{self.thread_name}][粉丝团msg]{content}")
 
     def _parse_emoji_chat_msg(self, payload):
         """聊天表情包消息"""
@@ -301,30 +327,30 @@ class DouyinDanmuFetcher:
         user = message.user
         common = message.common
         default_content = message.default_content
-        self.logger.info(f"【聊天表情包id】 {emoji_id},user：{user},common:{common},default_content:{default_content}")
+        logger.info(f"[{self.thread_name}][聊天表情包id]{emoji_id},user：{user},common:{common},default_content:{default_content}")
 
     def _parse_room_msg(self, payload):
         message = RoomMessage().parse(payload)
         common = message.common
         room_id = common.room_id
-        self.logger.info(f"【直播间msg】直播间id:{room_id}")
+        logger.info(f"[{self.thread_name}][直播间msg]直播间id:{room_id}")
 
     def _parse_room_state_msg(self, payload):
         message = RoomStatsMessage().parse(payload)
         display_long = message.display_long
-        self.logger.info(f"【直播间统计msg】{display_long}")
+        logger.info(f"[{self.thread_name}][直播间统计msg]{display_long}")
 
     def _parse_rank_msg(self, payload):
         message = RoomRankMessage().parse(payload)
         ranks_list = message.ranks_list
-        self.logger.info(f"【直播间排行榜msg】{ranks_list}")
+        logger.info(f"[{self.thread_name}][直播间排行榜msg]{ranks_list}")
 
     def _parse_control_msg(self, payload):
         """直播间状态消息"""
         message = ControlMessage().parse(payload)
 
         if message.status == 3:
-            self.logger.info("直播间已结束")
+            logger.info(f"[{self.thread_name}]直播间已结束")
             self.stop()
 
     def write_msg_to_file(self, msg):
@@ -334,4 +360,4 @@ class DouyinDanmuFetcher:
                 now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
                 file.write(f'[{now}] {msg} \n')
         except Exception as e:
-            self.logger.error(f"写入文件时发生错误: {e}")
+            logger.error(f"[{self.thread_name}]写入文件时发生错误: {e}")

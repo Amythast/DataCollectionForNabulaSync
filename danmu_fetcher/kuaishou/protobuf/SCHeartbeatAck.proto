@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCHeartbeatAck {
+  uint64 timestamp = 1;
+  uint64 clientTimestamp = 2;
+
+}

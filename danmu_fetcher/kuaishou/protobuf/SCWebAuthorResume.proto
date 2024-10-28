@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCWebAuthorResume {
+  uint64 time = 1;
+
+}

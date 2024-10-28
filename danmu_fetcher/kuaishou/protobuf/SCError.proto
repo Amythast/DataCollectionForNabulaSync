@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCError {
+  uint32 code = 1;
+  string msg = 2;
+  uint32 subCode = 3;
+
+}

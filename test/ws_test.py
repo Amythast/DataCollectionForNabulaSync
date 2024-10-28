@@ -1,12 +1,12 @@
 import binascii
 #
-hex_data = ''
-# unhexlify 返回由十六进制字符串 hexstr 表示的二进制数据
-data = binascii.unhexlify(hex_data)
-# 然后把它用二进制的形式写入文件，记住，不能直接复制到文件中
-with open('my-protobuf', 'wb') as w:
-    w.write(data)
+# hex_data = '08c8011af0010ac001522f6a39567556653159545951394634655173586c6c466a754b49323446743251426d7a6f644c33597559506a4332414e5245726c4a5a4c4d77533042754e6c7959597a4c44356456496c6466322f526a6247316e596d394243747a5048716d4d4a5572664f543776663078306872644d306f506d555132685065766f68686a7a42484142505757642f71796f33576e6e2f3351344a705934555845722f736f59504566466f327a7056787562714e344259504750396d4a334b32495a733558120b3662444b386e6a345a70733a1e4530514f31746b7357464a7a2d4159545f31373238393230333039393031'
+# # unhexlify 返回由十六进制字符串 hexstr 表示的二进制数据
+# dao = binascii.unhexlify(hex_data)
+# # 然后把它用二进制的形式写入文件，记住，不能直接复制到文件中
+# with open('my-protobuf', 'wb') as w:
+#     w.write(dao)
 
 
-# data = '3a02 6862'.replace(' ', '')
-# print(binascii.unhexlify(data).decode())
+data = '1F 8B 08 00 00 00 00 00 00 FF 04 C0 D1 69 C3 40 0C 00 50 3A 41 A1 13 F4 BB 70 70 92 A5 BB EA BE FA D9 21 0A A2 D4 D7 D6 10 1B 47 3A DB 04 3C 43 BE F3 91 CD 32 42 96 C8 7B 09 2D 40 46 66 26 E9 38 B1 A8 85 4C 00 18 31 42 87 39 11 32 25 D1 3E 80 2E 01 5E EF E7 DB E5 8A 6F 5F C3 D4 AA 4D DF 07 75 FB 29 F3 E2 FF 5E 6D AD B6 FF 0E E6 4D AD 1E 75 F4 02 19 01 62 02 20 26 D8 37 77 1D FD 4F DB 69 AE C5 F6 CD 7A D7 B5 E4 4E 30 0A 11 4B 92 98 E9 9D 24 7F 3C 7F 3E 3D 00 00 00 FF FF 01 00 00 FF FF CA EE 38 78 98 00 00 00'.replace(' ', '')
+print(binascii.unhexlify(data).decode())

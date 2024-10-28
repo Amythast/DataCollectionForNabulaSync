@@ -1,0 +1,10 @@
+syntax = "proto3";
+import "WebUserPauseType.proto";
+
+package kuaishou.protobuf;
+
+message CSWebUserPause {
+  uint64 time = 1;
+  WebUserPauseType pauseType = 2;
+
+}

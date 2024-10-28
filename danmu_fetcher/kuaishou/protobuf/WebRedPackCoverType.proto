@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+enum WebRedPackCoverType {
+  UNKNOWN_COVER_TYPE = 0;
+  NORMAL_COVER = 1;
+  PRETTY_COVER = 2;
+}

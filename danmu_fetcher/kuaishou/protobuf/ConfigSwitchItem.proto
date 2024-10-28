@@ -1,0 +1,10 @@
+syntax = "proto3";
+import "ConfigSwitchType.proto";
+
+package kuaishou.protobuf;
+
+message ConfigSwitchItem {
+  ConfigSwitchType configSwitchType = 1;
+  bool value = 2;
+
+}

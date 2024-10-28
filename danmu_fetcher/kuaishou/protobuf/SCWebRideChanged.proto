@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCWebRideChanged {
+  string rideId = 1;
+  uint32 requestMaxDelayMillis = 2;
+
+}

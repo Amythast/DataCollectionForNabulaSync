@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "jsdom": "^24.1.0",
+    "jsdon": "^0.2.3"
+  }
+}

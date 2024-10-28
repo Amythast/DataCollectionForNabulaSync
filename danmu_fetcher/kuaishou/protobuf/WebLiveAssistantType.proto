@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+enum WebLiveAssistantType {
+  UNKNOWN_ASSISTANT_TYPE = 0;
+  SUPER = 1;
+  JUNIOR = 2;
+}

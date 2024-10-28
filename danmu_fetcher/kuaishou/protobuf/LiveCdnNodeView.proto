@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message LiveCdnNodeView {
+  string cdn = 1;
+  string url = 2;
+  bool freeTraffic = 3;
+
+}

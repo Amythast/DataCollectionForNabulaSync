@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message SCPingAck {
+  string echoData = 1;
+
+}

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+
+package kuaishou.protobuf;
+
+message PicUrl {
+  string cdn = 1;
+  string url = 2;
+  string urlPattern = 3;
+  string ip = 4;
+
+}

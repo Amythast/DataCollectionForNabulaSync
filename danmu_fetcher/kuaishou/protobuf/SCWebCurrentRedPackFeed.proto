@@ -1,0 +1,9 @@
+syntax = "proto3";
+import "WebRedPackInfo.proto";
+
+package kuaishou.protobuf;
+
+message SCWebCurrentRedPackFeed {
+  repeated WebRedPackInfo redPack = 1;
+
+}
