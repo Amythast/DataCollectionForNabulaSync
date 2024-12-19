@@ -34,19 +34,7 @@ def get_xbogus(url: str) -> str:
 
 
 # 获取房间ID和用户secID
-def get_sec_user_id(url: str, proxy_addr: Union[str, None] = None):
-    if proxy_addr:
-        proxies = {
-            'http': proxy_addr,
-            'https': proxy_addr
-        }
-        response = requests.get(url, headers=headers, proxies=proxies, timeout=15)
-    else:
-        response = opener.open(url, timeout=15)
-    redirect_url = response.url
-    sec_user_id = re.search(r'sec_user_id=([\w\d_\-]+)&', redirect_url).group(1)
-    room_id = redirect_url.split('?')[0].rsplit('/', maxsplit=1)[1]
-    return room_id, sec_user_id
+
 
 
 # 获取直播间webID

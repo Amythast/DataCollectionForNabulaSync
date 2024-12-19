@@ -2,7 +2,7 @@ import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 
-from utils.logger import logger
+from common.logger import logger
 
 
 def task(name):

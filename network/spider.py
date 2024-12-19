@@ -24,9 +24,9 @@ import re
 import json
 import execjs
 import urllib.request
-from utils import (trace_error_decorator, dict_to_cookie_str)
-from network.config_helper import update_config
-from utils.logger import script_path
+from common import (trace_error_decorator, dict_to_cookie_str)
+from config_manager import update_config
+from common.logger import script_path
 import http.cookiejar
 from web_rid import get_sec_user_id
 
@@ -38,74 +38,7 @@ ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
 
 
-def get_req(
-        url: str,
-        proxy_addr: Union[str, None] = None,
-        headers: Union[dict, None] = None,
-        data: Union[dict, bytes, None] = None,
-        json_data: Union[dict, list, None] = None,
-        timeout: int = 20,
-        abroad: bool = False,
-        content_conding: str = 'utf-8',
-        redirect_url: bool = False,
-) -> Union[str, Any]:
-    if headers is None:
-        headers = {}
-    try:
-        if proxy_addr:
-            proxies = {
-                'http': proxy_addr,
-                'https': proxy_addr
-            }
-            if data or json_data:
-                response = requests.post(url, data=data, json=json_data, headers=headers, proxies=proxies,
-                                         timeout=timeout)
-            else:
-                response = requests.get(url, headers=headers, proxies=proxies, timeout=timeout)
-            if redirect_url:
-                return response.url
-            resp_str = response.text
-        else:
-            if data and not isinstance(data, bytes):
-                data = urllib.parse.urlencode(data).encode(content_conding)
-            if json_data and isinstance(json_data, (dict, list)):
-                data = json.dumps(json_data).encode(content_conding)
 
-            req = urllib.request.Request(url, data=data, headers=headers)
-
-            try:
-                if abroad:
-                    response = urllib.request.urlopen(req, timeout=timeout)
-                else:
-                    response = opener.open(req, timeout=timeout)
-                if redirect_url:
-                    return response.url
-                content_encoding = response.info().get('Content-Encoding')
-                try:
-                    if content_encoding == 'gzip':
-                        with gzip.open(response, 'rt', encoding=content_conding) as gzipped:
-                            resp_str = gzipped.read()
-                    else:
-                        resp_str = response.read().decode(content_conding)
-                finally:
-                    response.close()
-
-            except urllib.error.HTTPError as e:
-                if e.code == 400:
-                    resp_str = e.read().decode(content_conding)
-                else:
-                    raise
-            except urllib.error.URLError as e:
-                print("URL Error:", e)
-                raise
-            except Exception as e:
-                print("An error occurred:", e)
-                raise
-
-    except Exception as e:
-        resp_str = str(e)
-
-    return resp_str
 
 
 def get_params(url: str, params: str) -> Union[str, None]:
@@ -957,7 +890,7 @@ def get_bilibili_stream_data(url: str, proxy_addr: Union[str, None] = None, cook
         headers['Cookie'] = cookies
 
     def get_data_from_api(rid: str) -> Dict[str, Any]:
-        api = f'https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo?room_id={rid}&no_playurl=0&mask=1&qn=0&platform=web&protocol=0,1&format=0,1,2&codec=0,1,2&dolby=5&panorama=1'
+        api = f'https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo?room_id={rid}&no_playurl=0&mask=1&qn=0&live_platform=web&protocol=0,1&format=0,1,2&codec=0,1,2&dolby=5&panorama=1'
         json_str = get_req(url=api, proxy_addr=proxy_addr, headers=headers)
         return json.loads(json_str)
 
@@ -2290,7 +2223,7 @@ def get_twitchtv_stream_data(url: str, proxy_addr: Union[str, None] = None, cook
 
     data = {
         "operationName": "PlaybackAccessToken_Template",
-        "query": "query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!) {  streamPlaybackAccessToken(channelName: $login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {    value    signature   authorization { isForbidden forbiddenReasonCode }   __typename  }  videoPlaybackAccessToken(id: $vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {    value    signature   __typename  }}",
+        "query": "query PlaybackAccessToken_Template($login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!) {  streamPlaybackAccessToken(channelName: $login, params: {live_platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {    value    signature   authorization { isForbidden forbiddenReasonCode }   __typename  }  videoPlaybackAccessToken(id: $vodID, params: {live_platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {    value    signature   __typename  }}",
         "variables": {
             "isLive": True,
             "login": uid,
@@ -2319,7 +2252,7 @@ def get_twitchtv_stream_data(url: str, proxy_addr: Union[str, None] = None, cook
             "os_name": "Windows",
             "os_version": "NT%2010.0",
             "p": "3553732",
-            "platform": "web",
+            "live_platform": "web",
             "play_session_id": play_session_id,
             "player_backend": "mediaplayer",
             "player_version": "1.28.0-rc.1",

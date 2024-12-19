@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import whisper
 from sentence_transformers import SentenceTransformer, util
 from opencc import OpenCC
-
-import utils
+from common.utils import load_collect_file
+from common.logger import logger
 
 audio_text_prefix = '[audio_text]'
 audio_text_combined_prefix = '[audio_combined]'
@@ -133,7 +133,7 @@ def sample():
 
 # combine similar contents
 def combine_audio_contents(audio_text_file, similarity_threshold=0.8):
-    contents = utils.load_collect_file(audio_text_file)
+    contents = load_collect_file(audio_text_file)
     flat_contents = [content[1] for content in contents]
 
     # 计算每行的嵌入
@@ -180,8 +180,8 @@ def combine_audio_and_danmu(
         max_time_difference=4,
         similarity_threshold=0.6
 ):
-    audio_contents = utils.load_collect_file(audio_text_file)
-    danmu_contents = utils.load_collect_file(danmu_file)
+    audio_contents = load_collect_file(audio_text_file)
+    danmu_contents = load_collect_file(danmu_file)
     audio_segments = []
     for i in range(len(audio_contents) - go_through_audio_line):
         combined_text = ' '.join([audio_contents[j][1] + "." for j in range(i, i + go_through_audio_line)])

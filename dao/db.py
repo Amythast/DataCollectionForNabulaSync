@@ -7,8 +7,8 @@ import aiomysql
 
 from async_db import AsyncMysqlDB
 from dao import db_config
-from utils import utils
-from var import db_conn_pool_var, db_var
+from common.logger import logger
+from dao.dao_var import db_conn_pool_var, db_var
 
 
 def parse_mysql_url(mysql_url) -> Dict:
@@ -55,9 +55,9 @@ async def init_db():
     Returns:
 
     """
-    utils.logger.info("[init_db] start init mediacrawler db connect object")
+    logger.info("[init_db] start init mediacrawler db connect object")
     await init_db_inner()
-    utils.logger.info("[init_db] end init mediacrawler db connect object")
+    logger.info("[init_db] end init mediacrawler db connect object")
 
 
 async def close():
@@ -66,7 +66,7 @@ async def close():
     Returns:
 
     """
-    utils.logger.info("[close] close mediacrawler db pool")
+    logger.info("[close] close mediacrawler db pool")
     db_pool: aiomysql.Pool = db_conn_pool_var.get()
     if db_pool is not None:
         db_pool.close()
@@ -78,15 +78,15 @@ async def init_table_schema():
     Returns:
 
     """
-    utils.logger.info("[init_table_schema] begin init mysql table schema ...")
+    logger.info("[init_table_schema] begin init mysql table schema ...")
     await init_db_inner()
     async_db_obj: AsyncMysqlDB = db_var.get()
     async with aiofiles.open("dao/database-init.sql", mode="r", encoding="utf-8") as f:
         schema_sql = await f.read()
         await async_db_obj.execute(schema_sql)
-        utils.logger.info("[init_table_schema] table init successful")
+        logger.info("[init_table_schema] table init successful")
         await close()
 
 
 if __name__ == '__main__':
-    asyncio.get_event_loop().run_until_complete(init_table_schema())
+    asyncio.get_event_loop().run_until_complete(init_db())

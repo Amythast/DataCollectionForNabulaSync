@@ -9,10 +9,10 @@ import time
 from typing import Dict, Any
 import urllib.request
 
-from network.config_helper import ConfigManager
+from config_manager import ConfigManager
 from danmu_fetcher.danmu_fetcher_helper import DanmuFetcherHelper
-from utils.logger import logger
-from utils import (delete_line, transform_int_to_time)
+from common.logger import logger
+from common.utils import (delete_line, transform_int_to_time)
 from deep_translator import GoogleTranslator
 from translate import Translator
 from network.spider import (
@@ -233,6 +233,7 @@ class FFmpegExecutor:
         ]
 
 
+# deprecated
 class RecordManager:
     def __init__(self, config_manager: ConfigManager):
         self.rstr = r"[\/\\\:\*\?\"\<\>\|&.。,， ]"
@@ -511,7 +512,7 @@ class RecordManager:
         for key, (platform, func) in platform_functions.items():
             if key in record_url:
                 port_info = func(record_url, proxy_address, record_quality)
-                port_info['platform'] = platform
+                port_info['live_platform'] = platform
                 return port_info
 
         logger.error(f'{record_url} 未知直播地址')
@@ -840,7 +841,7 @@ class RecordManager:
 
     def _start_record_inner(self, record_quality, record_url, port_info, anchor_name, proxy_address, record_name):
         real_url = port_info['record_url']
-        platform = port_info['platform']
+        platform = port_info['live_platform']
         thread_name = threading.current_thread().name
         translated_platform = (translator_vpn if self.config_manager.use_vpn else translator).translate(platform)
         translated_platform = translated_platform.replace(" ", "")

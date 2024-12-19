@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import functools
 import hashlib
 import os
@@ -9,8 +7,26 @@ import sys
 import threading
 import traceback
 from logger import logger
+import urllib.request
+from urllib.error import URLError, HTTPError
 
-file_update_lock = threading.Lock()
+
+def proxy_test():
+    try:
+        print('系统代理检测中，请耐心等待...')
+        response_g = urllib.request.urlopen("https://www.google.com/", timeout=15)
+        print('\r全局/规则网络代理已开启√')
+        return True
+    except HTTPError as err:
+        print(f"HTTP error occurred: {err.code} - {err.reason}")
+        return False
+    except URLError as err:
+        print("URLError:", err.reason)
+        print('INFO：未检测到全局/规则网络代理，请检查代理配置（若无需录制海外直播请忽略此条提示）')
+        return False
+    except Exception as err:
+        print("An unexpected error occurred:", err)
+        return False
 
 
 def check_ffmpeg_existence(ffmpeg_path):
@@ -100,6 +116,9 @@ def contains_url(string: str) -> bool:
     pattern = (r"(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-zA-Z0-9][a-zA-Z0-9\-]+(\.["
                r"a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,10}(:[0-9]{1,5})?(\/.*)?$")
     return re.search(pattern, string) is not None
+
+
+file_update_lock = threading.Lock()
 
 
 def update_file(file_path: str, old_str: str, new_str: str, start_str: str = None):

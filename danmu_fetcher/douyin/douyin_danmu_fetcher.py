@@ -13,13 +13,12 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import patch
-
-import execjs
 import requests
 import websocket
 from fake_useragent import UserAgent
+from py_mini_racer import MiniRacer
 
-from danmu_fetcher.douyin import logger
+from common.logger import logger
 from danmu_fetcher.douyin.douyin_message import *
 
 
@@ -49,10 +48,7 @@ def patched_popen_encoding(encoding='utf-8'):
         yield
 
 
-def generate_signature(
-        wss,
-        script_file='/Users/feifeixia/LocalDesktop/GitHub/DataCollectionForNabulaSync/danmu_fetcher/douyin/sign.js'
-):
+def generate_signature(wss, script_file='./sign.js'):
     """
     出现gbk编码问题则修改 python模块subprocess.py的源码中Popen类的__init__函数参数encoding值为 "utf-8"
     """
@@ -71,10 +67,13 @@ def generate_signature(
     with codecs.open(script_file, 'r', encoding='utf8') as f:
         script = f.read()
 
-    context = execjs.compile(script)
-    with patched_popen_encoding(encoding='utf-8'):
-        ret = context.call('getSign', {'X-MS-STUB': md5_param})
-    return ret.get('X-Bogus')
+    ctx = MiniRacer()
+    ctx.eval(script)
+    try:
+        signature = ctx.call("get_sign", md5_param)
+        return signature
+    except Exception as e:
+        print(e)
 
 
 class DouyinDanmuFetcher:
@@ -99,7 +98,6 @@ class DouyinDanmuFetcher:
         self.message_handlers = {
             'WebcastChatMessage': self._parse_chat_msg,  # 聊天消息
             'WebcastControlMessage': self._parse_control_msg,  # 直播间状态消息
-            # 'WebcastGiftMessage': self._parseGiftMsg,  # 礼物消息
             # 'WebcastLikeMessage': self._parseLikeMsg,  # 点赞消息
             # 'WebcastMemberMessage': self._parseMemberMsg,  # 进入直播间消息
             # 'WebcastSocialMessage': self._parseSocialMsg,  # 关注消息

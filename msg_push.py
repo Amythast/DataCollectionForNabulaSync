@@ -11,7 +11,7 @@ import datetime
 from typing import Dict, Any, Optional, Union
 import json
 import urllib.request
-from utils import trace_error_decorator
+from common import trace_error_decorator
 
 no_proxy_handler = urllib.request.ProxyHandler({})
 opener = urllib.request.build_opener(no_proxy_handler)

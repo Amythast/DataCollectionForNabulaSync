@@ -1,8 +1,15 @@
+import functools
 import signal
+import threading
 
-from network.config_helper import *
-from record_helper import RecordManager
-from utils import (check_ffmpeg_existence)
+import schedule
+
+from config_manager import *
+from common.utils import check_ffmpeg_existence
+from file_processor.schedule_process_files import process_live_record_folders
+from live_platform.base.base_var import *
+from dao import repository
+from live_platform.douyin.live.douyin_live_client import DouyinLiveClient
 
 
 def signal_handler(_signal, _frame):
@@ -23,6 +30,7 @@ default_path = f'{script_path}/downloads'
 os.makedirs(default_path, exist_ok=True)
 
 config_manager = ConfigManager()
+config_manager_var.set(config_manager)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # --------------------------检测是否存在ffmpeg-------------------------------------
@@ -30,7 +38,7 @@ check_ffmpeg_existence(ffmpeg_path)
 
 # --------------------------初始化程序-------------------------------------
 print("-----------------------------------------------------")
-print("|           DataCollectionForNabulaSync             |")
+print("|           DataCollectionForNebulaSync             |")
 print("-----------------------------------------------------")
 
 os.makedirs(os.path.dirname(config_file), exist_ok=True)
@@ -39,21 +47,20 @@ os.makedirs(os.path.dirname(config_file), exist_ok=True)
 backup_thread = threading.Thread(target=config_manager.backup_config_start, args=(), daemon=True)
 backup_thread.start()
 
-config_manager = ConfigManager()
 config_manager.load_config()
-record_manager = RecordManager(config_manager)  # 初始化录制管理器
+task_manager = TaskManager(max_workers=config_manager.max_request)
+task_manager_var.set(task_manager)
+group_id_gen_var.set(SafeGroupIDGenerator())
+recoding_var.set(set())
+
+live_clients = [DouyinLiveClient()]
+schedule.every(2).hours.do(functools.partial(process_live_record_folders, config_manager.video_save_path))
 
 while True:
-    record_manager.start_record_threads()  # 启动录制线程
+    for client in live_clients:
+        target_lives = await client.get_live_info()
+        client.start_record(target_lives)
 
-    if first_run:
-        display_info_thread = threading.Thread(target=record_manager.display_info, args=(), daemon=True)
-        display_info_thread.start()
-        change_max_connect_thread = threading.Thread(target=record_manager.change_max_connect, args=(), daemon=True)
-        change_max_connect_thread.start()
-
-        first_run = False
-
-    time.sleep(3)
+    time.sleep(30)
     config_manager.load_config()  # 重新加载配置, 处理配置文件修改
-
+    schedule.run_pending()

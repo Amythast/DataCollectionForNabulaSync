@@ -3,14 +3,11 @@ import datetime
 import os
 import shutil
 import sys
-import threading
 import time
-import urllib.request
 import re
 from typing import Any, Union
-
-from utils import (logger, check_md5, contains_url, update_file)
-from urllib.error import URLError, HTTPError
+from common.logger import logger
+from common.utils import (proxy_test, check_md5, contains_url, update_file)
 
 
 def read_specific_config_value(file_path, section, key):
@@ -42,24 +39,6 @@ def read_specific_config_value(file_path, section, key):
         print(f"部分[{section}]不存在于文件中。")
 
     return None
-
-
-def proxy_test():
-    try:
-        print('系统代理检测中，请耐心等待...')
-        response_g = urllib.request.urlopen("https://www.google.com/", timeout=15)
-        print('\r全局/规则网络代理已开启√')
-        return True
-    except HTTPError as err:
-        print(f"HTTP error occurred: {err.code} - {err.reason}")
-        return False
-    except URLError as err:
-        print("URLError:", err.reason)
-        print('INFO：未检测到全局/规则网络代理，请检查代理配置（若无需录制海外直播请忽略此条提示）')
-        return False
-    except Exception as err:
-        print("An unexpected error occurred:", err)
-        return False
 
 
 def update_config(file_path, section, key, new_value):

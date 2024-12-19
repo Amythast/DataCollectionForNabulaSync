@@ -1,13 +1,9 @@
 import os
 import shutil
-
-import schedule
-import time
 import re
-from file_processor import live_file_processor
 
-# sales_bot 目录的根路径
-base_dir = "/Volumes/External/sales_bot"
+from common.logger import logger
+from file_processor import live_file_processor
 
 
 # 检查是否是有效的日期文件夹
@@ -16,13 +12,13 @@ def is_date_folder(folder_name):
     return re.match(r'\d{4}-\d{2}-\d{2}', folder_name) is not None
 
 
-def process_live_record_folders():
+def process_live_record_folders(base_dir):
     # 遍历 sales_bot 目录下的平台文件夹
     for platform_folder in os.listdir(base_dir):
         if check_hide_folder_or_file(platform_folder):
             continue
         platform_path = os.path.join(base_dir, platform_folder)
-        print(f"处理平台文件夹: {platform_path}")
+        logger.info(f"处理平台文件夹: {platform_path}")
         # 确认这是一个文件夹
         if os.path.isdir(platform_path):
             # 遍历每个平台文件夹下的主播文件夹
@@ -98,14 +94,6 @@ def move_file_to_processed_folder(file_path):
     print(f"Moved {file_path} to {destination_path}")
 
 
-# 设置定时任务每2h执行一次
-schedule.every(2).hours.do(process_live_record_folders)
-
 if __name__ == "__main__":
-    # 初次执行时运行一次任务
     process_live_record_folders()
 
-    # 进入定时任务的循环
-    while True:
-        schedule.run_pending()
-        time.sleep(60)  # 每分钟检查一次

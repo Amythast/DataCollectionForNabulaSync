@@ -1,11 +1,12 @@
+import asyncio
+from datetime import datetime
 from typing import List, Dict
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from dao.async_db import AsyncMysqlDB
-from dao.model import LiveStreamRecord, FinetuneData
-from var import db_var
+from dao.db import init_db
+from dao.model import LiveRecord, LiveTarget
+from common.logger import logger
+from dao.dao_var import db_var
 
 
 async def query_live_record_by_id(id: int) -> Dict:
@@ -21,7 +22,9 @@ async def query_live_record_by_id(id: int) -> Dict:
     sql: str = f"select * from nebula_live_stream_records where id = '{id}'"
     rows: List[Dict] = await async_db_conn.query(sql)
     if len(rows) > 0:
+        logger.info(f"query live record by id: {id} success")
         return rows[0]
+    logger.warning(f"query live record by id: {id} failed")
     return dict()
 
 
@@ -34,12 +37,13 @@ async def add_new_content(content_item: Dict) -> int:
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    last_row_id: int = await async_db_conn.item_to_table("douyin_aweme", content_item)
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    last_row_id: int = await async_db_conn.item_to_table("nebula_live_stream_records", content_item)
+    logger.info(f"add new content success, last row id: {last_row_id}")
     return last_row_id
 
 
-async def update_content_by_content_id(content_id: str, content_item: Dict) -> int:
+async def update_content_by_content_id(content_id: int, content_item: Dict) -> int:
     """
     更新一条记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
     Args:
@@ -49,186 +53,162 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    effect_row: int = await async_db_conn.update_table("douyin_aweme", content_item, "aweme_id", content_id)
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    effect_row: int = await async_db_conn.update_table("nebula_live_stream_records", content_item, "id", content_id)
+    logger.info(f"update content by content id: {content_id} success, effect row: {effect_row}")
     return effect_row
 
 
-
-async def query_comment_by_comment_id(comment_id: str) -> Dict:
+async def query_live_record_by_anchor_name(anchor_name: str) -> List[Dict]:
     """
-    查询一条评论内容
+    查询主播记录
     Args:
-        comment_id:
+        anchor_name:
 
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    sql: str = f"select * from douyin_aweme_comment where comment_id = '{comment_id}'"
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    sql: str = f"select * from nebula_live_stream_records where anchor_name = '{anchor_name}'"
     rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+    if len(rows) <= 0:
+        logger.warning(f"query creator by anchor name: {anchor_name} failed")
+    else:
+        logger.info(f"query creator by anchor name: {anchor_name} success")
+    return rows
 
 
-async def add_new_comment(comment_item: Dict) -> int:
+async def update_live_record_by_anchor_name(anchor_name: str, anchor_item: Dict) -> int:
     """
-    新增一条评论记录
+    更新主播信息
     Args:
-        comment_item:
+        anchor_name:
+        anchor_item:
 
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    last_row_id: int = await async_db_conn.item_to_table("douyin_aweme_comment", comment_item)
-    return last_row_id
-
-
-async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> int:
-    """
-    更新增一条评论记录
-    Args:
-        comment_id:
-        comment_item:
-
-    Returns:
-
-    """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    effect_row: int = await async_db_conn.update_table("douyin_aweme_comment", comment_item, "comment_id", comment_id)
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    effect_row: int = await async_db_conn.update_table(
+        table_name="nebula_live_stream_records",
+        updates=anchor_item,
+        field_where="anchor_name",
+        value_where=anchor_name
+    )
+    logger.info(f"update creator by anchor name: {anchor_name} success, effect row: {effect_row}")
     return effect_row
 
 
-async def query_creator_by_user_id(user_id: str) -> Dict:
+async def query_target_live_by_platform(platfrom: str) -> List[LiveTarget]:
     """
-    查询一条创作者记录
-    Args:
-        user_id:
-
+    按平台查询要录制的直播
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    sql: str = f"select * from dy_creator where user_id = '{user_id}'"
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    sql: str = f"select * from nebula_live_stream_target where live_platform = '{platfrom}' and need_record = 1"
     rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+    if len(rows) <= 0:
+        logger.warning(f"query_target_live failed")
+    else:
+        logger.info(f"query_target_live success, {len(rows)} will be recorded")
+
+    live_targets = [
+        LiveTarget(
+            id=row.get("id"),
+            live_id=row.get("live_id"),
+            anchor_name=row.get("anchor_name"),
+            category=row.get("category"),
+            platform=row.get("platform"),
+            url=row.get("url"),
+            need_record=row.get("need_record"),
+            created_at=row.get("created_at"),
+            updated_at=row.get("updated_at"),
+        )
+        for row in rows
+    ]
+    return live_targets
 
 
-async def add_new_creator(creator_item: Dict) -> int:
+async def query_live_record_by_anchor_name_and_slice(anchor_name: str, live_slice: str) -> List[Dict]:
     """
-    新增一条创作者信息
+    查询直播记录
     Args:
-        creator_item:
+        anchor_name:
+        live_slice:
 
     Returns:
 
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    last_row_id: int = await async_db_conn.item_to_table("dy_creator", creator_item)
-    return last_row_id
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    sql: str = f"select * from nebula_live_stream_records where anchor_name = '{anchor_name}' and live_slice = '{live_slice}'"
+    rows: List[Dict] = await async_db_conn.query(sql)
+    if len(rows) <= 0:
+        logger.warning(f"query live record by anchor name and slice failed")
+    else:
+        logger.info(f"query live record by anchor name and slice success")
+    return rows
 
 
-async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
+async def save_live_file(record: LiveRecord) -> int:
     """
-    更新一条创作者信息
-    Args:
-        user_id:
-        creator_item:
-
-    Returns:
-
+    保存录制的直播视频/音频/弹幕文件
     """
-    async_db_conn: AsyncMysqlDB = media_crawler_db_var.get()
-    effect_row: int = await async_db_conn.update_table("dy_creator", creator_item, "user_id", user_id)
-    return effect_row
-
-
-def add_live_stream_record(
-        anchor_name,
-        platform,
-        category,
-        age,
-        gender,
-        live_date,
-        live_address,
-        live_stream_file,
-        live_stream_transform,
-        live_danmu_file,
-        live_danmu_transform
-):
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    new_record = LiveStreamRecord(
-        anchor_name=anchor_name,
-        platform=platform,
-        category=category,
-        age=age,
-        gender=gender,
-        live_date=live_date,
-        live_address=live_address,
-        live_stream_file=live_stream_file,
-        live_stream_transform=live_stream_transform,
-        live_danmu_file=live_danmu_file,
-        live_danmu_transform=live_danmu_transform
+    async_db_conn: AsyncMysqlDB = db_var.get()
+    existing_record = await async_db_conn.get_first(
+        "SELECT id FROM nebula_live_stream_records WHERE anchor_name=%s AND platform=%s AND live_slice=%s",
+        record.anchor_name, record.platform, record.live_slice
     )
-    session.add(new_record)
-    session.commit()
-    session.close()
 
+    item = {
+        "anchor_name": record.anchor_name,
+        "platform": record.platform,
+        "category": record.category,
+        "live_date": record.live_date,
+        "age": record.age,
+        "gender": record.gender,
+        "live_url": record.live_url,
+        "live_slice": record.live_slice,
+        "live_stream_file": record.live_stream_file,
+        "live_stream_transform": record.live_stream_transform,
+        "live_danmu_file": record.live_danmu_file,
+        "live_danmu_transform": record.live_danmu_transform,
+    }
 
-def query_live_stream_record():
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    records = session.query(LiveStreamRecord).all()
-    session.close()
-    return records
+    if existing_record:
+        # 如果记录存在，执行更新操作
+        effect_row_id = await async_db_conn.update_table(
+            "nebula_live_stream_records",
+            item,
+            field_where="id",
+            value_where=existing_record["id"]
+        )
+        logger.info(f"Updated live stream record by id: {existing_record['id']}, affected rows id: {effect_row_id}")
+    else:
+        effect_row_id = await async_db_conn.item_to_table("nebula_live_stream_records", item)
+        logger.info(f"Inserted new live stream record, new id: {effect_row_id}")
 
-
-def add_finetune_data(
-        anchor_name,
-        platform,
-        category,
-        live_date,
-        target_platform,
-        data
-):
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    new_record = FinetuneData(
-        anchor_name=anchor_name,
-        platform=platform,
-        category=category,
-        live_date=live_date,
-        target_platform=target_platform,
-        data=data
-    )
-    session.add(new_record)
-    session.commit()
-    session.close()
-
-
-def query_finetune_data():
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    records = session.query(FinetuneData).all()
-    session.close()
-    return records
+    return effect_row_id
 
 
 # test
-if __name__ == '__main__':
-    add_live_stream_record(
-        anchor_name='Kslala666',
-        platform='Kuaishou',
-        category='Beauty',
-        live_date='2021-12-12 12:12:12',
-        live_address='https://www.kuaishou.com',
-        live_stream_file=b'',
-        live_stream_transform={},
-        live_danmu_file=b'',
-        live_danmu_transform={}
+async def _test_save_live_file():
+    await init_db()
+
+    record = LiveRecord(
+        anchor_name="test",
+        platform="test",
+        category="test",
+        live_date=datetime(2024, 11, 17, 18, 30, 45),
+        age=18,
+        gender="male",
+        live_slice="0",
+        live_url="test",
+        live_stream_file="video_save_path/test"
     )
+    effect_row = await save_live_file(record)
+    logger.info(f"effect row: {effect_row}")
+
+
+if __name__ == '__main__':
+    asyncio.get_event_loop().run_until_complete(_test_save_live_file())
